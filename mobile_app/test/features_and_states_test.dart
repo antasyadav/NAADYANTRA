@@ -13,6 +13,7 @@ import 'package:mobile_app/features/devices/screens/device_details_screen.dart';
 import 'package:mobile_app/shared/models/device.dart';
 import 'package:mobile_app/shared/models/event.dart';
 import 'package:mobile_app/shared/services/providers.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 void main() {
   group('Diagnostic State Views (Loading, Error, Empty)', () {
@@ -450,6 +451,37 @@ void main() {
       expect(find.textContaining('EVENT #101'), findsOneWidget);
     });
 
+    group('Offline Connectivity State Providers', () {
+      test('isOfflineProvider resolves true when connectivity stream emits none', () async {
+        final container = ProviderContainer(
+          overrides: [
+            connectivityStreamProvider.overrideWith(
+              (ref) => Stream.value([ConnectivityResult.none]),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await container.read(connectivityStreamProvider.future);
+        final isOffline = container.read(isOfflineProvider);
+        expect(isOffline, isTrue);
+      });
+
+      test('isOfflineProvider resolves false when connectivity stream emits wifi', () async {
+        final container = ProviderContainer(
+          overrides: [
+            connectivityStreamProvider.overrideWith(
+              (ref) => Stream.value([ConnectivityResult.wifi]),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await container.read(connectivityStreamProvider.future);
+        final isOffline = container.read(isOfflineProvider);
+        expect(isOffline, isFalse);
+      });
+    });
   });
 }
 

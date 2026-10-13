@@ -39,6 +39,7 @@ class _ArcGaugePainter extends CustomPainter {
   final double progress; // 0.0 – 1.0
   final Color arcColor;
   final Color trackColor;
+  static const double thresholdProgress = 400.0 / 4096.0;
 
   _ArcGaugePainter({
     required this.progress,
@@ -49,25 +50,69 @@ class _ArcGaugePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
-    final cy = size.height * 0.80;
-    // Radius capped so arc never escapes the widget bounds vertically
-    final radius = math.min(size.width * 0.38, cy - 8);
-    const startAngle = math.pi * 1.1;
-    const sweepMax = math.pi * 0.8;
+    final cy = size.height * 0.72;
+    final radius = math.min(size.width * 0.38, cy - 12);
 
+    // Symmetric sweep: 230 degrees centered at 270 deg (top apex)
+    const startAngle = math.pi * 0.86;
+    const sweepMax = math.pi * 1.28;
+
+    // 1. Dial scale graduation tick marks
+    final tickTrackColor = trackColor.withValues(alpha: 0.55);
+    final tickPaint = Paint()
+      ..color = tickTrackColor
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+
+    final majorTickPaint = Paint()
+      ..color = tickTrackColor.withValues(alpha: 0.95)
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+
+    const int totalTicks = 24;
+    for (int i = 0; i <= totalTicks; i++) {
+      final tickAngle = startAngle + (sweepMax * (i / totalTicks));
+      final bool isMajor = (i % 6 == 0);
+      final tickInnerR = radius + (isMajor ? 7.0 : 11.0);
+      final tickOuterR = radius + 15.0;
+
+      final p1 = Offset(
+        cx + tickInnerR * math.cos(tickAngle),
+        cy + tickInnerR * math.sin(tickAngle),
+      );
+      final p2 = Offset(
+        cx + tickOuterR * math.cos(tickAngle),
+        cy + tickOuterR * math.sin(tickAngle),
+      );
+      canvas.drawLine(p1, p2, isMajor ? majorTickPaint : tickPaint);
+    }
+
+    // Threshold indicator pip on ticks ring (at 400 ADC)
+    final threshAngle = startAngle + sweepMax * thresholdProgress.clamp(0.0, 1.0);
+    final thPip1 = Offset(
+      cx + (radius + 5.0) * math.cos(threshAngle),
+      cy + (radius + 5.0) * math.sin(threshAngle),
+    );
+    final thPip2 = Offset(
+      cx + (radius + 18.0) * math.cos(threshAngle),
+      cy + (radius + 18.0) * math.sin(threshAngle),
+    );
+    canvas.drawLine(
+      thPip1,
+      thPip2,
+      Paint()
+        ..color = AppColors.darkBurntOrange
+        ..strokeWidth = 2.4
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // 2. Base track (smooth, rounded)
     final trackPaint = Paint()
-      ..color = trackColor
+      ..color = trackColor.withValues(alpha: 0.40)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
+      ..strokeWidth = 8.5
       ..strokeCap = StrokeCap.round;
 
-    final fillPaint = Paint()
-      ..color = arcColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round;
-
-    // Track
     canvas.drawArc(
       Rect.fromCircle(center: Offset(cx, cy), radius: radius),
       startAngle,
@@ -76,8 +121,14 @@ class _ArcGaugePainter extends CustomPainter {
       trackPaint,
     );
 
-    // Fill
+    // 3. Active Arc Fill
     if (progress > 0) {
+      final fillPaint = Paint()
+        ..color = arcColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8.5
+        ..strokeCap = StrokeCap.round;
+
       canvas.drawArc(
         Rect.fromCircle(center: Offset(cx, cy), radius: radius),
         startAngle,
@@ -85,23 +136,39 @@ class _ArcGaugePainter extends CustomPainter {
         false,
         fillPaint,
       );
-    }
 
-    // Glow effect on the tip
-    if (progress > 0.02) {
+      // Glow effect and bead on the active tip
       final tipAngle = startAngle + sweepMax * progress.clamp(0.0, 1.0);
       final tipX = cx + radius * math.cos(tipAngle);
       final tipY = cy + radius * math.sin(tipAngle);
-      final glowPaint = Paint()
-        ..color = arcColor.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-      canvas.drawCircle(Offset(tipX, tipY), 8, glowPaint);
+
+      // Outer bloom glow
+      canvas.drawCircle(
+        Offset(tipX, tipY),
+        10,
+        Paint()
+          ..color = arcColor.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+      );
+      // Bright core bead
+      canvas.drawCircle(
+        Offset(tipX, tipY),
+        4.0,
+        Paint()..color = const Color(0xFFFFFFFF),
+      );
+      canvas.drawCircle(
+        Offset(tipX, tipY),
+        2.2,
+        Paint()..color = arcColor,
+      );
     }
   }
 
   @override
   bool shouldRepaint(_ArcGaugePainter old) =>
-      old.progress != progress || old.arcColor != arcColor;
+      old.progress != progress ||
+      old.arcColor != arcColor ||
+      old.trackColor != trackColor;
 }
 
 // ─────────────────────────────────────────────
@@ -243,7 +310,7 @@ class _AnimatedArcGaugeState extends State<_AnimatedArcGauge>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return RepaintBoundary(
       child: SizedBox(
-        height: 100,
+        height: 135,
         width: double.infinity,
         child: AnimatedBuilder(
           animation: _anim,
@@ -255,32 +322,53 @@ class _AnimatedArcGaugeState extends State<_AnimatedArcGauge>
                   painter: _ArcGaugePainter(
                     progress: _anim.value,
                     arcColor: widget.color,
-                    trackColor: isDark ? AppColors.darkBorder : AppColors.warmStone,
+                    trackColor:
+                        isDark ? AppColors.darkBorder : AppColors.warmStone,
                   ),
                 ),
               ),
               Positioned(
-                bottom: 10,
+                bottom: 12,
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       widget.value > 0
                           ? widget.value.toStringAsFixed(0)
                           : '--',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: 27,
                         fontWeight: FontWeight.w900,
                         color: widget.color,
-                        letterSpacing: -0.5,
+                        letterSpacing: -0.6,
                       ),
                     ),
-                    Text(
-                      widget.unit,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.warmGraphite,
-                        letterSpacing: 1.2,
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkSurface
+                            : AppColors.warmStone.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isDark
+                              ? AppColors.darkBorder
+                              : AppColors.warmStone,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        '${widget.unit} · RMS AMPLITUDE',
+                        style: const TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.warmGraphite,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
                   ],
@@ -292,6 +380,87 @@ class _AnimatedArcGaugeState extends State<_AnimatedArcGauge>
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────
+//  OSCILLOSCOPE STANDBY VIEW & GRID
+// ─────────────────────────────────────────────
+class _OscilloscopeStandbyView extends StatelessWidget {
+  final bool isDark;
+
+  const _OscilloscopeStandbyView({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.industrialIvory,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.warmStone,
+          width: 0.8,
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size(double.infinity, 52),
+            painter: _OscilloscopeGridPainter(isDark: isDark),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const PulsingBeacon(size: 6, color: AppColors.burntOrange),
+              const SizedBox(width: 8),
+              Text(
+                'BUFFER PRIMED · AWAITING 2+ TELEMETRY SAMPLES',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: isDark ? AppColors.softSand : AppColors.warmGraphite,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OscilloscopeGridPainter extends CustomPainter {
+  final bool isDark;
+
+  _OscilloscopeGridPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = (isDark ? AppColors.darkBorder : AppColors.warmStone)
+          .withValues(alpha: 0.45)
+      ..strokeWidth = 0.6;
+
+    // Horizontal grid lines
+    const int hDivs = 4;
+    for (int i = 1; i < hDivs; i++) {
+      final y = size.height * (i / hDivs);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // Vertical grid lines
+    const int vDivs = 8;
+    for (int i = 1; i < vDivs; i++) {
+      final x = size.width * (i / vDivs);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_OscilloscopeGridPainter old) => old.isDark != isDark;
 }
 
 // ─────────────────────────────────────────────
@@ -945,17 +1114,19 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
     final isCritical = rms > 400;
 
     return IndustrialCard(
-      title: 'ACOUSTIC RMS',
+      title: 'ACOUSTIC RMS TRANSDUCER',
       subtitle: '12-bit ADC · Piezo Contact Transducer · ADC1_CH4',
       trailing: StatusPill(
-        label: rms == 0 ? 'AWAITING' : (isCritical ? 'ANOMALY' : 'NOMINAL'),
+        label: rms == 0
+            ? 'AWAITING'
+            : (isCritical ? 'ANOMALY DETECTED' : 'NOMINAL BASELINE'),
         type: rms == 0
             ? StatusType.neutral
             : (isCritical ? StatusType.danger : StatusType.ok),
       ),
       child: Column(
         children: [
-          // Arc Gauge
+          // Precision Arc Gauge
           _AnimatedArcGauge(
             value: rms,
             maxValue: 4096,
@@ -964,44 +1135,151 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
             color: isCritical ? AppColors.alertDanger : AppColors.burntOrange,
           ),
 
-          // Threshold labels
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const SizedBox(height: 6),
+
+          // Industrial Calibration Scale Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? AppColors.darkSurfaceElevated
+                  : AppColors.industrialIvory,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : AppColors.warmStone,
+                width: 0.8,
+              ),
+            ),
+            child: Column(
               children: [
-                const Text('0',
-                    style: TextStyle(fontSize: 9, color: AppColors.warmGraphite)),
-                Text(
-                  'Leak threshold: 400 ADC',
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: isCritical
-                        ? AppColors.alertDanger
-                        : AppColors.warmGraphite,
-                    fontWeight: isCritical ? FontWeight.w700 : FontWeight.w400,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '0 ADC\nBASELINE',
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.warmGraphite,
+                        height: 1.2,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isCritical
+                            ? AppColors.alertDanger.withValues(alpha: 0.12)
+                            : AppColors.burntOrange.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isCritical
+                              ? AppColors.alertDanger
+                              : AppColors.burntOrange,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isCritical
+                                ? Icons.warning_rounded
+                                : Icons.tune_rounded,
+                            size: 11,
+                            color: isCritical
+                                ? AppColors.alertDanger
+                                : AppColors.burntOrange,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'LEAK TRIGGER ≥ 400 ADC',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                              color: isCritical
+                                  ? AppColors.alertDanger
+                                  : AppColors.burntOrange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Text(
+                      '4095 ADC\n12-BIT FS',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.warmGraphite,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 7),
+                // Calibration Scale Track
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: SizedBox(
+                    height: 5,
+                    width: double.infinity,
+                    child: Stack(
+                      children: [
+                        Container(
+                          color: isDark
+                              ? AppColors.darkBorder
+                              : AppColors.warmStone,
+                        ),
+                        // Safe zone
+                        FractionallySizedBox(
+                          widthFactor: (400.0 / 4096.0).clamp(0.0, 1.0),
+                          child: Container(
+                            color: AppColors.alertOk.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        // Current fill
+                        if (rms > 0)
+                          FractionallySizedBox(
+                            widthFactor: (rms / 4096.0).clamp(0.0, 1.0),
+                            child: Container(
+                              color: isCritical
+                                  ? AppColors.alertDanger
+                                  : AppColors.burntOrange,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-                const Text('4095',
-                    style: TextStyle(fontSize: 9, color: AppColors.warmGraphite)),
               ],
             ),
           ),
 
-          // Sparkline history
+          const SizedBox(height: 12),
+
+          // Sparkline history or Oscilloscope Standby
           if (rmsHistory.length >= 2) ...[
-            const SizedBox(height: 16),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'RMS HISTORY (last 10 events)',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                  color: AppColors.warmGraphite,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'RMS BUFFER (LAST 10 EVENTS)',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: AppColors.warmGraphite,
+                  ),
                 ),
-              ),
+                StatusPill(
+                  label: '${rms.toStringAsFixed(0)} ADC PEAK',
+                  type: isCritical ? StatusType.danger : StatusType.active,
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             RepaintBoundary(
@@ -1020,27 +1298,60 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
               ),
             ),
           ] else ...[
-            const SizedBox(height: 12),
-            const Text(
-              'Sparkline available after 2+ telemetry events are received.',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppColors.warmGraphite,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            _OscilloscopeStandbyView(isDark: isDark),
           ],
 
-          const SizedBox(height: 8),
-          const Text(
-            'Hardware: IIR DC-block (R=0.995) · FreeRTOS Timer ISR · 1024-sample window · 50% hop',
-            style: TextStyle(
-              fontSize: 9,
+          const SizedBox(height: 12),
+
+          // Hardware specifications telemetry chips
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
+            children: [
+              _buildHardwareSpecChip('ADC', '12-bit ADC1_CH4', isDark),
+              _buildHardwareSpecChip('FILTER', 'IIR DC-block R=0.995', isDark),
+              _buildHardwareSpecChip('ISR', 'FreeRTOS 1024-smp', isDark),
+              _buildHardwareSpecChip('HOP', '50% hop', isDark),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHardwareSpecChip(String label, String value, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+      decoration: BoxDecoration(
+        color:
+            isDark ? AppColors.darkSurfaceElevated : AppColors.industrialIvory,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.warmStone,
+          width: 0.7,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
               color: AppColors.warmGraphite,
-              height: 1.4,
             ),
-            textAlign: TextAlign.center,
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 8.5,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'monospace',
+              color: isDark ? AppColors.pureWhite : AppColors.carbon,
+            ),
           ),
         ],
       ),

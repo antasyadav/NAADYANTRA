@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'auth_repository.dart';
 import 'device_repository.dart';
@@ -53,7 +54,34 @@ final assessmentRepositoryProvider = Provider<AssessmentRepository>((ref) {
 });
 
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
-  return DashboardRepository(apiClient: ref.watch(apiClientProvider));
+  return DashboardRepository(
+    apiClient: ref.watch(apiClientProvider),
+    cache: ref.watch(localDatabaseProvider),
+  );
+});
+
+// Connectivity Providers
+final connectivityProvider = Provider<Connectivity>((ref) {
+  return Connectivity();
+});
+
+final connectivityStreamProvider =
+    StreamProvider<List<ConnectivityResult>>((ref) {
+      try {
+        return ref.watch(connectivityProvider).onConnectivityChanged;
+      } catch (_) {
+        return const Stream.empty();
+      }
+    });
+
+final isOfflineProvider = Provider<bool>((ref) {
+  final connectivityAsync = ref.watch(connectivityStreamProvider);
+  return connectivityAsync.when(
+    data: (results) =>
+        results.isEmpty || results.contains(ConnectivityResult.none),
+    loading: () => false,
+    error: (_, _) => false,
+  );
 });
 
 // Selected Device ID

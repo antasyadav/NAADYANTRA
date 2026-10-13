@@ -2,20 +2,26 @@ import '../models/dashboard.dart';
 import '../../core/network/api_client.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/errors/exceptions.dart';
+import '../../core/storage/local_database.dart';
 
 class DashboardRepository {
   final ApiClient _apiClient;
+  final LocalDatabase _cache;
 
-  DashboardRepository({ApiClient? apiClient})
-    : _apiClient = apiClient ?? ApiClient();
+  DashboardRepository({ApiClient? apiClient, LocalDatabase? cache})
+    : _apiClient = apiClient ?? ApiClient(),
+      _cache = cache ?? LocalDatabase();
 
-  /// Fetch live system overview statistics from the backend.
+  /// Fetch live system overview statistics from the backend with SQLite cache fallback.
   Future<DashboardOverview> getOverview() async {
     try {
       final response = await _apiClient.get(ApiConstants.dashboardOverview);
       return DashboardOverview.fromJson(
         response.data as Map<String, dynamic>,
       );
+    } on NetworkException {
+      final cached = await _cache.getDashboardOverview();
+      return DashboardOverview.fromJson(cached);
     } on AppException {
       rethrow;
     } catch (e) {
@@ -23,7 +29,7 @@ class DashboardRepository {
     }
   }
 
-  /// Fetch the most recent activity items (sessions + alert events).
+  /// Fetch the most recent activity items (sessions + alert events) with SQLite fallback.
   Future<List<RecentActivityItem>> getRecentActivity({
     int pageSize = 10,
   }) async {
@@ -42,6 +48,14 @@ class DashboardRepository {
             (e) => RecentActivityItem.fromJson(e as Map<String, dynamic>),
           )
           .toList();
+    } on NetworkException {
+      final cached = await _cache.getCachedRecentActivity(limit: pageSize);
+      if (cached.isNotEmpty) {
+        return cached
+            .map((e) => RecentActivityItem.fromJson(e))
+            .toList();
+      }
+      return [];
     } on AppException {
       rethrow;
     } catch (e) {
@@ -49,3 +63,4 @@ class DashboardRepository {
     }
   }
 }
+

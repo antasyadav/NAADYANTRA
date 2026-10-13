@@ -121,6 +121,7 @@ class DeviceRepository {
   Future<List<Event>> getDeviceEvents(
     String deviceId, {
     int limit = 20,
+    bool useCache = true,
   }) async {
     try {
       final response = await _apiClient.get(
@@ -134,9 +135,24 @@ class DeviceRepository {
       final List<dynamic> items = data is Map<String, dynamic> && data['items'] is List
           ? data['items'] as List<dynamic>
           : (data is List<dynamic> ? data : <dynamic>[]);
-      return items
+      final events = items
           .map((e) => Event.fromJson(e as Map<String, dynamic>))
           .toList();
+      for (final event in events) {
+        await _cache.cacheEvent(event.toJson());
+      }
+      return events;
+    } on NetworkException {
+      if (useCache) {
+        final cached = await _cache.getCachedEventsByDeviceId(
+          deviceId,
+          limit: limit,
+        );
+        if (cached.isNotEmpty) {
+          return cached.map((e) => Event.fromJson(e)).toList();
+        }
+      }
+      rethrow;
     } on AppException {
       rethrow;
     } catch (e) {
@@ -147,6 +163,7 @@ class DeviceRepository {
   Future<List<SessionSummary>> getDeviceSummaries(
     String deviceId, {
     int limit = 20,
+    bool useCache = true,
   }) async {
     try {
       final response = await _apiClient.get(
@@ -161,9 +178,24 @@ class DeviceRepository {
           data is Map<String, dynamic> && data['items'] is List
               ? data['items'] as List<dynamic>
               : (data is List<dynamic> ? data : <dynamic>[]);
-      return items
+      final summaries = items
           .map((e) => SessionSummary.fromJson(e as Map<String, dynamic>))
           .toList();
+      for (final summary in summaries) {
+        await _cache.cacheSummary(summary.toJson());
+      }
+      return summaries;
+    } on NetworkException {
+      if (useCache) {
+        final cached = await _cache.getCachedSummariesByDeviceId(
+          deviceId,
+          limit: limit,
+        );
+        if (cached.isNotEmpty) {
+          return cached.map((s) => SessionSummary.fromJson(s)).toList();
+        }
+      }
+      rethrow;
     } on AppException {
       rethrow;
     } catch (e) {

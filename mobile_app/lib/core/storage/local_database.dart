@@ -377,6 +377,44 @@ class LocalDatabase {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getCachedEventsByDeviceId(
+    String deviceId, {
+    int limit = 50,
+  }) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'events',
+        where: 'device_id = ?',
+        whereArgs: [deviceId],
+        orderBy: 'server_timestamp DESC',
+        limit: limit,
+      );
+      return results;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCachedSummariesByDeviceId(
+    String deviceId, {
+    int limit = 20,
+  }) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'summaries',
+        where: 'device_id = ?',
+        whereArgs: [deviceId],
+        orderBy: 'server_timestamp DESC',
+        limit: limit,
+      );
+      return results;
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> getCachedSummary(int sessionId) async {
     try {
       final db = await database;
@@ -389,6 +427,82 @@ class LocalDatabase {
       return results.first;
     } catch (e) {
       return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> getDashboardOverview() async {
+    try {
+      final db = await database;
+      final devCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM devices'),
+          ) ??
+          0;
+      final activeDevCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM devices WHERE is_active = 1'),
+          ) ??
+          0;
+      final sessCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM sessions'),
+          ) ??
+          0;
+      final eventCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM events'),
+          ) ??
+          0;
+      final traineeRows = await db.rawQuery(
+        'SELECT COUNT(DISTINCT trainee_id) as c FROM sessions',
+      );
+      final traineeCount = traineeRows.isNotEmpty
+          ? (traineeRows.first['c'] as int? ?? 0)
+          : 0;
+      return {
+        'total_sessions': sessCount,
+        'total_devices': devCount,
+        'total_trainees': traineeCount,
+        'total_events': eventCount,
+        'recent_sessions_count': sessCount,
+        'active_devices_count': activeDevCount,
+      };
+    } catch (e) {
+      return {
+        'total_sessions': 0,
+        'total_devices': 0,
+        'total_trainees': 0,
+        'total_events': 0,
+        'recent_sessions_count': 0,
+        'active_devices_count': 0,
+      };
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCachedRecentActivity({
+    int limit = 10,
+  }) async {
+    try {
+      final db = await database;
+      final sessions = await db.query(
+        'sessions',
+        orderBy: 'cached_at DESC',
+        limit: limit,
+      );
+      final List<Map<String, dynamic>> items = [];
+      for (final s in sessions) {
+        items.add({
+          'type': 'session',
+          'timestamp': (s['started_at'] ?? s['cached_at']) as String,
+          'device_id': (s['device_id'] ?? 'unknown') as String,
+          'trainee_id': s['trainee_id'] as String?,
+          'details': {
+            'session_id': s['session_id'],
+            'status': s['ended_at'] != null ? 'completed' : 'active',
+            'started_at': s['started_at'],
+            'ended_at': s['ended_at'],
+          },
+        });
+      }
+      return items;
+    } catch (e) {
+      return [];
     }
   }
 
