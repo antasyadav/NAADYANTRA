@@ -2,9 +2,10 @@ class ApiConstants {
   // Base paths
   static const String apiV1 = '/api/v1';
 
-  // Health
+  // Health & Ingestion
   static const String health = '/health';
   static const String ready = '/ready';
+  static const String firmwareLog = '/api/log';
   static const String systemInfo = '$apiV1/system/info';
 
   // Authentication

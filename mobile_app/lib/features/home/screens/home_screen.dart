@@ -502,6 +502,61 @@ class _HomeTab extends ConsumerWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
+                    TactilePressable(
+                      onTap: () => context.push('/assessments'),
+                      child: IndustrialCard(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.burntOrange.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.assignment_turned_in_rounded,
+                                color: AppColors.burntOrange,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Vocational Skill Evaluations',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'SIH26244 Rubrics • Trainee Competency Scorecard',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.warmGraphite,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.warmGraphite,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

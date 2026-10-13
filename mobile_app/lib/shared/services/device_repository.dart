@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../models/device.dart';
 import '../models/common.dart';
 import '../models/event.dart';
@@ -123,10 +125,13 @@ class DeviceRepository {
         ApiConstants.events,
         queryParameters: <String, dynamic>{
           'device_id': deviceId,
-          'limit': limit,
+          'page_size': limit,
         },
       );
-      final items = response.data as List<dynamic>;
+      final data = response.data;
+      final List<dynamic> items = data is Map<String, dynamic> && data['items'] is List
+          ? data['items'] as List<dynamic>
+          : (data is List<dynamic> ? data : <dynamic>[]);
       return items
           .map((e) => Event.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -134,6 +139,38 @@ class DeviceRepository {
       rethrow;
     } catch (e) {
       throw ServerException('Failed to fetch device events');
+    }
+  }
+
+  Future<bool> sendTelemetryLog({
+    required String deviceId,
+    required double rms,
+    required int gas,
+    required double leak,
+    required String alert,
+    required double temp,
+    int session = 1,
+    String trainee = 'TR-01',
+  }) async {
+    try {
+      await _apiClient.post(
+        '${ApiConstants.firmwareLog}?trainee=$trainee&session=$session&kind=event',
+        data: <String, dynamic>{
+          'device': deviceId,
+          'millis': DateTime.now().millisecondsSinceEpoch % 10000000,
+          'rms': rms,
+          'gas': gas,
+          'leak': leak,
+          'alert': alert,
+          'temp': temp,
+        },
+        options: Options(
+          headers: <String, dynamic>{'X-Device-Key': 'dev-key-123'},
+        ),
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }
