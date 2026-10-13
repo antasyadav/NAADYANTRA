@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from backend.database import get_db
+from backend.config import settings
 from backend.schemas import HealthResponse, ReadyResponse, SystemInfoResponse
 
 router = APIRouter()
@@ -41,6 +42,6 @@ async def system_info():
     return SystemInfoResponse(
         api_version="1.0.0",
         application_version="1.0.0",
-        environment="development",  # This should come from settings
+        environment=settings.environment,
         server_utc=datetime.now(timezone.utc)
     )

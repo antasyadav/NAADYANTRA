@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -30,6 +30,8 @@ env/
 *.sqlite3
 
 # Flutter
+!mobile_app/lib/
+!mobile_app/lib/**
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -85,7 +87,7 @@ Digital_Heroes*
 Git/
 Grand*
 Kreo*
-Lib/
+/Lib/
 Local*
 Microsoft*
 MyProject/

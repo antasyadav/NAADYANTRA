@@ -4,10 +4,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/device.dart';
 import '../../../shared/models/event.dart';
 import '../../../shared/services/providers.dart';
+import '../../../shared/widgets/industrial_card.dart';
+import '../../../shared/widgets/status_pill.dart';
 import '../../../core/config/app_config.dart';
+import '../../../shared/motion/staggered_entrance.dart';
+import '../../../shared/motion/pulsing_beacon.dart';
+import '../../../shared/backgrounds/diagnostic_radar_sweep.dart';
+import '../../../shared/backgrounds/acoustic_signal_field.dart';
+
+final deviceStatusProvider =
+    FutureProvider.autoDispose<DeviceStatus>((ref) async {
+      final deviceId = ref.watch(selectedDeviceIdProvider) ?? 'SIH-DEV-01';
+      final repo = ref.watch(deviceRepositoryProvider);
+      return await repo.getDeviceStatus(deviceId);
+    });
+
+final recentEventsProvider =
+    FutureProvider.autoDispose<List<Event>>((ref) async {
+      final deviceId = ref.watch(selectedDeviceIdProvider) ?? 'SIH-DEV-01';
+      final repo = ref.watch(deviceRepositoryProvider);
+      return await repo.getDeviceEvents(deviceId, limit: 10);
+    });
 
 class InspectionScreen extends ConsumerStatefulWidget {
   const InspectionScreen({super.key});
@@ -59,43 +80,174 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
   Widget build(BuildContext context) {
     final deviceStatus = ref.watch(deviceStatusProvider);
     final recentEvents = ref.watch(recentEventsProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live Inspection'),
+        title: const Row(
+          children: [
+            PulsingBeacon(size: 8, color: AppColors.burntOrange),
+            SizedBox(width: 8),
+            Text('LIVE DIAGNOSTIC PROBE'),
+          ],
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshData),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Sync Probes',
+            onPressed: _refreshData,
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _refreshData,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            // Device Status Card
-            deviceStatus.when(
-              data: (status) => _buildDeviceStatusCard(context, status),
-              loading: () => const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
+            // Live Status Banner
+            StaggeredEntrance(
+              index: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
-              ),
-              error: (error, stack) => Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Failed to load device status'),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.pureWhite,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBorder : AppColors.warmStone,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const StatusPill(
+                      label: 'LIVE STREAM',
+                      type: StatusType.active,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Polling telemetry every ${AppConfig.liveInspectionPollInterval.inSeconds}s',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.warmGraphite,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.sensors_rounded,
+                      size: 18,
+                      color: AppColors.burntOrange,
+                    ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
 
-            // Instructions
-            _buildInstructionsCard(context),
-            const SizedBox(height: 16),
+            // Device Status Card with Diagnostic Radar Sweep
+            deviceStatus.when(
+              data: (status) => StaggeredEntrance(
+                index: 1,
+                child: _buildDeviceStatusCard(context, status, isDark),
+              ),
+              loading: () => const IndustrialCard(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+              error: (error, _) => IndustrialCard(
+                borderColor: AppColors.alertDanger,
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppColors.alertDanger,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Failed to reach telemetry probe: $error',
+                        style: const TextStyle(
+                          color: AppColors.alertDanger,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded),
+                      onPressed: _refreshData,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
 
-            // Recent Events
-            _buildRecentEventsCard(context, recentEvents),
+            // Live Waveform Stream Trace
+            const StaggeredEntrance(
+              index: 2,
+              child: IndustrialCard(
+                title: 'Acoustic Carrier Stream',
+                subtitle: 'Real-Time Microphone DMA Buffer Activity',
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 80,
+                      child: AcousticSignalField(
+                        height: 80,
+                        opacity: 0.7,
+                        animate: true,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'DMA Window: 4096 Samples',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.warmGraphite,
+                          ),
+                        ),
+                        Text(
+                          'Sampling Rate: 192.0 kHz',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.burntOrange,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Physical Hardware Inspection Protocol Guide
+            StaggeredEntrance(
+              index: 3,
+              child: _buildInstructionsCard(context, isDark),
+            ),
+            const SizedBox(height: 12),
+
+            // Recent Events Stream
+            StaggeredEntrance(
+              index: 4,
+              child: _buildRecentEventsCard(context, recentEvents, isDark),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -105,183 +257,184 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
   Widget _buildDeviceStatusCard(
     BuildContext context,
     DeviceStatus deviceStatus,
+    bool isDark,
   ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  deviceStatus.isOnline ? Icons.wifi : Icons.wifi_off,
-                  color: deviceStatus.isOnline ? Colors.green : Colors.grey,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  deviceStatus.deviceId,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
+    final isOnline = deviceStatus.isOnline;
+
+    return IndustrialCard(
+      title: 'Target Node: ${deviceStatus.deviceId}',
+      subtitle: isOnline
+          ? 'Receiving High-Frequency Acoustic Packets'
+          : 'Probe Standby / Inactive',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isOnline) ...[
+            const PulsingBeacon(size: 8, color: AppColors.alertOk),
+            const SizedBox(width: 6),
+          ],
+          StatusPill(
+            label: isOnline ? 'ONLINE' : 'OFFLINE',
+            type: isOnline ? StatusType.online : StatusType.offline,
+            showDot: !isOnline,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  DiagnosticRadarSweep(size: 50, isScanning: isOnline),
+                  Icon(
+                    isOnline
+                        ? Icons.wifi_tethering_rounded
+                        : Icons.portable_wifi_off_rounded,
+                    color: isOnline
+                        ? AppColors.alertOk
+                        : AppColors.warmGraphite,
+                    size: 20,
                   ),
-                  decoration: BoxDecoration(
-                    color: deviceStatus.isOnline
-                        ? Colors.green.withValues(alpha: 0.1)
-                        : Colors.grey.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: deviceStatus.isOnline ? Colors.green : Colors.grey,
-                    ),
-                  ),
-                  child: Text(
-                    deviceStatus.isOnline ? 'Online' : 'Offline',
-                    style: TextStyle(
-                      color: deviceStatus.isOnline ? Colors.green : Colors.grey,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (deviceStatus.lastSeenAt != null) ...[
-              _buildInfoRow(
-                context,
-                'Last Seen',
-                _formatDateTime(deviceStatus.lastSeenAt!),
+                ],
               ),
-            ],
-            if (deviceStatus.firmwareVersion != null) ...[
-              _buildInfoRow(context, 'Firmware', deviceStatus.firmwareVersion!),
-            ],
-            _buildInfoRow(
-              context,
-              'Recent Activity',
-              '${deviceStatus.recentActivityCount} events (24h)',
-            ),
-            if (deviceStatus.lastError != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red),
-                ),
-                child: Row(
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.error, color: Colors.red, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        deviceStatus.lastError!,
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                    Text(
+                      deviceStatus.deviceId,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isOnline
+                          ? 'Acoustic RMS baseline established'
+                          : 'Awaiting serial / wireless handshake',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.warmGraphite,
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInstructionsCard(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.info_outline, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(
-                  'Session Controls',
-                  style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 14),
+          Divider(color: isDark ? AppColors.darkBorder : AppColors.warmStone),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Recent Bursts: ${deviceStatus.recentActivityCount}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'The ESP32 device controls sessions using its physical BOOT button:',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            _buildInstructionStep(
-              '1',
-              'Press BOOT button briefly to START a session',
-            ),
-            _buildInstructionStep(
-              '2',
-              'Perform inspection in controlled environment',
-            ),
-            _buildInstructionStep(
-              '3',
-              'Press BOOT button again to STOP the session',
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning, color: Colors.orange, size: 20),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'This is a training aid only. Not a certified safety instrument.',
-                      style: TextStyle(color: Colors.orange, fontSize: 12),
-                    ),
-                  ),
-                ],
+              Text(
+                deviceStatus.lastSeenAt != null
+                    ? 'Sync: ${DateFormat("HH:mm:ss").format(deviceStatus.lastSeenAt!)}'
+                    : 'Awaiting Ping',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.warmGraphite,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildInstructionStep(String number, String text) {
+  Widget _buildInstructionsCard(BuildContext context, bool isDark) {
+    return IndustrialCard(
+      title: 'Physical Hardware Inspection Guide',
+      subtitle: 'Standard Operating Protocol on ESP32-S3 Rig',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildInstructionStep(
+            '1',
+            'Position Acoustic Contact Probe',
+            'Clamp or hold the ultrasound transducer firmly against the suspect pipe valve or weld seam.',
+          ),
+          const Divider(),
+          _buildInstructionStep(
+            '2',
+            'Trigger BOOT Button (GPIO 0)',
+            'Press the onboard BOOT button for 1.5s to start session recording and capture FFT frames.',
+          ),
+          const Divider(),
+          _buildInstructionStep(
+            '3',
+            'Inspect Spectrum in Real-Time',
+            'Watch the live timeline below for anomaly triggers, RMS surge flags, and gas telemetry.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionStep(String step, String title, String body) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.1),
+            width: 22,
+            height: 22,
+            decoration: const BoxDecoration(
+              color: AppColors.burntOrange,
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
-                number,
+                step,
                 style: const TextStyle(
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  color: AppColors.pureWhite,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.warmGraphite,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -289,256 +442,167 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
 
   Widget _buildRecentEventsCard(
     BuildContext context,
-    AsyncValue<List<Event>> recentEvents,
+    AsyncValue<List<Event>> recentEventsAsync,
+    bool isDark,
   ) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.timeline, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(
-                  'Recent Events',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            recentEvents.when(
-              data: (events) {
-                if (events.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Column(
-                        children: [
-                          Icon(Icons.event_busy, size: 48, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text(
-                            'No recent events',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Start a session on the device to see events here',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
+    return IndustrialCard(
+      title: 'Live Anomaly Stream',
+      subtitle: 'Triggered Event Log from Acoustic Sensors',
+      trailing: IconButton(
+        icon: const Icon(Icons.refresh_rounded, size: 18),
+        onPressed: _refreshData,
+      ),
+      child: recentEventsAsync.when(
+        data: (events) {
+          if (events.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 32,
+                      color: AppColors.alertOk,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'No Live Anomalies Detected',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
-                  );
-                }
-                return Column(
-                  children: events.take(10).map((event) {
-                    return _buildEventTile(context, event);
-                  }).toList(),
-                );
-              },
-              loading: () => const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(),
+                    SizedBox(height: 4),
+                    Text(
+                      'RMS level remains within baseline calibration thresholds.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.warmGraphite,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              error: (error, stack) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Failed to load events',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        error.toString(),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+            );
+          }
+
+          return ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: events.take(10).length,
+            separatorBuilder: (_, _) => const Divider(),
+            itemBuilder: (context, index) {
+              final event = events[index];
+              return _buildEventTile(context, event, isDark);
+            },
+          );
+        },
+        loading: () => const Padding(
+          padding: EdgeInsets.all(24),
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+        error: (error, _) => Text(
+          'Failed to load events: $error',
+          style: const TextStyle(color: AppColors.alertDanger, fontSize: 12),
         ),
       ),
     );
   }
 
-  Widget _buildEventTile(BuildContext context, Event event) {
+  Widget _buildEventTile(BuildContext context, Event event, bool isDark) {
     final alertColor = _getAlertColor(event.alert);
 
-    return Column(
-      children: [
-        ListTile(
-          leading: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: alertColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _getEventIcon(event.eventName),
-              color: alertColor,
-              size: 20,
-            ),
-          ),
-          title: Text(
-            event.eventName ?? event.eventKind,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_formatDateTime(event.serverTimestamp)),
-              if (event.alert != null)
-                Text(
-                  event.alert!,
-                  style: TextStyle(color: alertColor, fontSize: 12),
-                ),
-              if (event.cause != null)
-                Text(
-                  event.cause!,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-            ],
-          ),
-          trailing: _buildSensorChip(event),
-        ),
-        const Divider(),
-      ],
-    );
-  }
-
-  Widget _buildSensorChip(Event event) {
-    final sensors = <String>[];
-    if (event.hasGasData) sensors.add('Gas');
-    if (event.hasAcousticData) sensors.add('Acoustic');
-    if (event.hasMoistureData) sensors.add('Moisture');
-    if (event.hasTemperatureData) sensors.add('Temp');
-    if (event.hasUvData) sensors.add('UV');
-
-    if (sensors.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.blue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        sensors.join(', '),
-        style: const TextStyle(fontSize: 10, color: Colors.blue),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: alertColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(Icons.warning_amber_rounded, color: alertColor, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      (event.cause ?? 'ANOMALY').toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      DateFormat('HH:mm:ss').format(event.serverTimestamp),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.warmGraphite,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'RMS: ${event.rms?.toStringAsFixed(1) ?? "0.0"} | Gas Delta: ${event.gasDelta ?? 0}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.warmGraphite,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-            ),
+          const SizedBox(width: 8),
+          StatusPill(
+            label: event.alert ?? 'NORMAL',
+            type: _getStatusType(event.alert),
           ),
         ],
       ),
     );
   }
 
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return DateFormat('MMM d, HH:mm').format(dateTime);
-    }
-  }
-
   Color _getAlertColor(String? alert) {
-    switch (alert) {
+    if (alert == null) return AppColors.warmGraphite;
+    switch (alert.toUpperCase()) {
       case 'DANGER':
-        return Colors.red;
+      case 'CRITICAL':
+        return AppColors.alertDanger;
       case 'CAUTION':
-        return Colors.orange;
+      case 'WARNING':
+        return AppColors.alertCaution;
       case 'OK':
-        return Colors.green;
+      case 'NOMINAL':
+        return AppColors.alertOk;
       default:
-        return Colors.grey;
+        return AppColors.warmGraphite;
     }
   }
 
-  IconData _getEventIcon(String? eventName) {
-    switch (eventName) {
-      case 'session_start':
-        return Icons.play_circle;
-      case 'session_stop':
-        return Icons.stop_circle;
-      case 'alert':
-        return Icons.warning;
+  StatusType _getStatusType(String? alert) {
+    if (alert == null) return StatusType.neutral;
+    switch (alert.toUpperCase()) {
+      case 'DANGER':
+      case 'CRITICAL':
+        return StatusType.danger;
+      case 'CAUTION':
+      case 'WARNING':
+        return StatusType.caution;
+      case 'OK':
+      case 'NOMINAL':
+        return StatusType.ok;
       default:
-        return Icons.sensors;
+        return StatusType.neutral;
     }
   }
 }
-
-// Providers for inspection screen
-final deviceStatusProvider = FutureProvider<DeviceStatus>((ref) async {
-  final deviceRepo = ref.watch(deviceRepositoryProvider);
-  final selectedDeviceId = ref.watch(selectedDeviceIdProvider);
-  // Use selected device ID or default
-  final deviceId = selectedDeviceId ?? 'SIH-DEV-01';
-  return await deviceRepo.getDeviceStatus(deviceId);
-});
-
-final recentEventsProvider = FutureProvider<List<Event>>((ref) async {
-  final sessionRepo = ref.watch(sessionRepositoryProvider);
-  final selectedDeviceId = ref.watch(selectedDeviceIdProvider);
-  // Get most recent session's events
-  final sessions = await sessionRepo.getSessions(
-    page: 1,
-    pageSize: 1,
-    deviceId: selectedDeviceId,
-  );
-  if (sessions.items.isEmpty) return [];
-
-  final events = await sessionRepo.getSessionEvents(
-    sessions.items.first.id,
-    page: 1,
-    pageSize: 10,
-  );
-  return events.items;
-});

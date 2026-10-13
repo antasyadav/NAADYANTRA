@@ -10,6 +10,9 @@ import '../features/sessions/screens/session_list_screen.dart';
 import '../features/sessions/screens/session_detail_screen.dart';
 import '../features/settings/screens/settings_screen.dart';
 
+import '../features/assessments/screens/assessment_list_screen.dart';
+import '../shared/widgets/state_views.dart';
+
 // Router Provider
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -62,27 +65,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'settings',
         builder: (context, state) => const SettingsScreen(),
       ),
+      GoRoute(
+        path: '/assessments',
+        name: 'assessments',
+        builder: (context, state) => const AssessmentListScreen(),
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Page not found',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(state.uri.toString()),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => context.go('/'),
-              child: const Text('Go Home'),
-            ),
-          ],
-        ),
+      body: IndustrialEmptyView(
+        icon: Icons.alt_route_rounded,
+        title: 'Diagnostic Route Not Found',
+        message: 'Endpoint: ${state.uri}',
+        actionLabel: 'Return to Terminal',
+        onAction: () => context.go('/'),
       ),
     ),
   );

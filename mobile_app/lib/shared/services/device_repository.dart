@@ -1,5 +1,6 @@
 import '../models/device.dart';
 import '../models/common.dart';
+import '../models/event.dart';
 import '../../core/network/api_client.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/errors/exceptions.dart';
@@ -110,6 +111,29 @@ class DeviceRepository {
       rethrow;
     } catch (e) {
       throw ServerException('Failed to fetch device status');
+    }
+  }
+
+  Future<List<Event>> getDeviceEvents(
+    String deviceId, {
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _apiClient.get(
+        ApiConstants.events,
+        queryParameters: <String, dynamic>{
+          'device_id': deviceId,
+          'limit': limit,
+        },
+      );
+      final items = response.data as List<dynamic>;
+      return items
+          .map((e) => Event.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw ServerException('Failed to fetch device events');
     }
   }
 }

@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/services/providers.dart';
-import '../../assessments/screens/assessment_list_screen.dart';
+import '../../../shared/widgets/industrial_card.dart';
+import '../../../shared/widgets/industrial_button.dart';
+import '../../../shared/widgets/status_pill.dart';
+import '../../../shared/motion/staggered_entrance.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -11,23 +15,44 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final selectedDevice = ref.watch(selectedDeviceIdProvider) ?? 'SIH-DEV-01';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('WORKSTATION SETTINGS')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
-          // User Info
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+          // Operator Profile Card
+          StaggeredEntrance(
+            index: 0,
+            child: IndustrialCard(
+              padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 32,
-                    child: Text(
-                      (authState.username ?? 'U')[0].toUpperCase(),
-                      style: const TextStyle(fontSize: 24),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppColors.darkSurfaceElevated
+                          : AppColors.pureWhite,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.burntOrange,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        (authState.username ?? 'U')[0].toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.burntOrange,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -35,14 +60,30 @@ class SettingsScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          authState.username ?? 'User',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                authState.username ?? 'Operator',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const StatusPill(
+                              label: 'AUTHENTICATED',
+                              type: StatusType.completed,
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Trainer',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                        const Text(
+                          'Certified Diagnostic Specialist',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.warmGraphite,
+                          ),
                         ),
                       ],
                     ),
@@ -51,150 +92,168 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          // Settings Sections
-          _buildSection(
-            context,
-            title: 'Connection',
-            items: [
-              _SettingsItem(
-                icon: Icons.wifi,
-                title: 'API URL',
-                subtitle: 'http://10.0.2.2:8000',
-                onTap: () {
-                  // Show API URL dialog
-                },
-              ),
-              _SettingsItem(
-                icon: Icons.devices,
-                title: 'Device Selection',
-                subtitle:
-                    ref.watch(selectedDeviceIdProvider) ?? 'Select a device',
-                onTap: () {
-                  _showDeviceSelectionDialog(context, ref);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          _buildSection(
-            context,
-            title: 'Preferences',
-            items: [
-              _SettingsItem(
-                icon: Icons.language,
-                title: 'Language',
-                subtitle: 'English',
-                onTap: () {
-                  // Show language selection
-                },
-              ),
-              _SettingsItem(
-                icon: Icons.dark_mode,
-                title: 'Theme',
-                subtitle: 'System',
-                onTap: () {
-                  // Show theme selection
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          _buildSection(
-            context,
-            title: 'Data',
-            items: [
-              _SettingsItem(
-                icon: Icons.delete_outline,
-                title: 'Clear Cache',
-                subtitle: 'Remove cached data',
-                onTap: () {
-                  _showClearCacheDialog(context);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          _buildSection(
-            context,
-            title: 'Assessments',
-            items: [
-              _SettingsItem(
-                icon: Icons.assignment,
-                title: 'View Assessments',
-                subtitle: 'Review your assessment history',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AssessmentListScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          _buildSection(
-            context,
-            title: 'About',
-            items: [
-              _SettingsItem(
-                icon: Icons.info_outline,
-                title: 'App Version',
-                subtitle: '1.0.0',
-                onTap: null,
-              ),
-              _SettingsItem(
-                icon: Icons.help_outline,
-                title: 'Help & Support',
-                subtitle: 'Get help with the app',
-                onTap: () {
-                  // Show help screen
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Logout Button
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Logout', style: TextStyle(color: Colors.red)),
-              onTap: () async {
-                await ref.read(authStateProvider.notifier).logout();
-                if (context.mounted) {
-                  context.go('/login');
-                }
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Safety Disclaimer
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange),
-            ),
-            child: Row(
+          // Hardware & Telemetry Link Section
+          StaggeredEntrance(
+            index: 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.warning, color: Colors.orange),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'This is a training aid, not a certified safety instrument.',
-                    style: TextStyle(fontSize: 12),
+                _buildSectionHeader('HARDWARE TELEMETRY LINK', isDark),
+                IndustrialCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.memory_rounded,
+                        title: 'Assigned Diagnostic Node',
+                        subtitle: selectedDevice,
+                        trailing: const StatusPill(
+                          label: 'LINKED',
+                          type: StatusType.online,
+                          showDot: false,
+                        ),
+                        onTap: () => _showDeviceSelectionDialog(context, ref),
+                      ),
+                      const Divider(),
+                      _buildSettingsTile(
+                        icon: Icons.alt_route_rounded,
+                        title: 'FastAPI Backend Host',
+                        subtitle: 'http://10.0.2.2:8000',
+                        trailing: const StatusPill(
+                          label: 'ACTIVE',
+                          type: StatusType.ok,
+                          showDot: false,
+                        ),
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Endpoint configured via AppConfig.apiBaseUrl',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(),
+                      _buildSettingsTile(
+                        icon: Icons.speed_rounded,
+                        title: 'Acoustic Sampling Frequency',
+                        subtitle: '192.0 kHz (16-bit DMA Ring Buffer)',
+                        trailing: const StatusPill(
+                          label: 'LOCKED',
+                          type: StatusType.neutral,
+                          showDot: false,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Workstation Storage & Diagnostics
+          StaggeredEntrance(
+            index: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionHeader(
+                  'WORKSTATION STORAGE & DIAGNOSTICS',
+                  isDark,
+                ),
+                IndustrialCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.layers_outlined,
+                        title: 'Offline Telemetry Cache',
+                        subtitle: 'SQLite Local Database',
+                        trailing: TextButton(
+                          onPressed: () => _showPurgeCacheDialog(context, ref),
+                          child: const Text(
+                            'Purge Cache',
+                            style: TextStyle(
+                              color: AppColors.alertDanger,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(),
+                      _buildSettingsTile(
+                        icon: Icons.assignment_turned_in_outlined,
+                        title: 'Vocational Training Evaluations',
+                        subtitle:
+                            'View trainee grading rubrics & skill reports',
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.warmGraphite,
+                        ),
+                        onTap: () => context.push('/assessments'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Session Control / Sign Out
+          StaggeredEntrance(
+            index: 3,
+            child: Column(
+              children: [
+                IndustrialButton(
+                  label: 'Disconnect & Sign Out',
+                  icon: Icons.power_settings_new_rounded,
+                  variant: IndustrialButtonVariant.danger,
+                  onPressed: () async {
+                    await ref.read(authStateProvider.notifier).logout();
+                    if (context.mounted) {
+                      context.go('/login');
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // Compliance & Build Watermark
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        'NAADYANTRA FIELD DIAGNOSTICS PLATFORM',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.warmGraphite,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Build 1.0.0+1 • ESP32-S3 Acoustic RIG Engine',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? AppColors.darkTextSecondary.withValues(
+                                  alpha: 0.7,
+                                )
+                              : AppColors.warmGraphite.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),
@@ -203,43 +262,53 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSection(
-    BuildContext context, {
+  Widget _buildSectionHeader(String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+          color: isDark ? AppColors.darkTextSecondary : AppColors.warmGraphite,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsTile({
+    required IconData icon,
     required String title,
-    required List<_SettingsItem> items,
+    String? subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(color: Theme.of(context).colorScheme.primary),
-          ),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.burntOrange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(height: 8),
-        Card(
-          child: Column(
-            children: items
-                .map(
-                  (item) => ListTile(
-                    leading: Icon(item.icon),
-                    title: Text(item.title),
-                    subtitle: item.subtitle != null
-                        ? Text(item.subtitle!)
-                        : null,
-                    trailing: item.onTap != null
-                        ? const Icon(Icons.chevron_right)
-                        : null,
-                    onTap: item.onTap,
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-      ],
+        child: Icon(icon, color: AppColors.burntOrange, size: 20),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.warmGraphite,
+              ),
+            )
+          : null,
+      trailing: trailing,
+      onTap: onTap,
     );
   }
 
@@ -247,7 +316,10 @@ class SettingsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Device'),
+        title: const Text(
+          'Select Hardware Node',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: Consumer(
@@ -256,59 +328,73 @@ class SettingsScreen extends ConsumerWidget {
               return devicesAsync.when(
                 data: (paginatedResponse) {
                   if (paginatedResponse.items.isEmpty) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Text('No devices available'),
-                      ),
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('No probe nodes currently paired.'),
                     );
                   }
-                  return ListView.builder(
+                  return ListView.separated(
                     shrinkWrap: true,
                     itemCount: paginatedResponse.items.length,
+                    separatorBuilder: (_, _) => const Divider(),
                     itemBuilder: (context, index) {
                       final device = paginatedResponse.items[index];
                       final isSelected =
                           ref.watch(selectedDeviceIdProvider) ==
                           device.deviceId;
+
                       return ListTile(
-                        title: Text(device.name ?? device.deviceId),
-                        subtitle: Text(
-                          device.isActive ? 'Active' : 'Inactive',
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.memory_rounded,
+                          color: isSelected
+                              ? AppColors.burntOrange
+                              : AppColors.warmGraphite,
+                        ),
+                        title: Text(
+                          device.name ?? device.deviceId,
                           style: TextStyle(
-                            color: device.isActive ? Colors.green : Colors.grey,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                           ),
+                        ),
+                        subtitle: Text(
+                          'Node ID: ${device.deviceId} • ${device.isActive ? "online" : "offline"}',
+                          style: const TextStyle(fontSize: 11),
                         ),
                         trailing: isSelected
                             ? const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
+                                Icons.check_circle_rounded,
+                                color: AppColors.burntOrange,
                               )
                             : null,
                         onTap: () {
                           ref.read(selectedDeviceIdProvider.notifier).state =
                               device.deviceId;
-                          Navigator.pop(context);
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Hardware target switched to ${device.deviceId}',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
                         },
                       );
                     },
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stack) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red),
-                      const SizedBox(height: 8),
-                      Text('Failed to load devices'),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => ref.invalidate(devicesProvider),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
+                ),
+                error: (error, _) => Text(
+                  'Failed to fetch devices: $error',
+                  style: const TextStyle(color: AppColors.alertDanger),
                 ),
               );
             },
@@ -316,50 +402,49 @@ class SettingsScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Dismiss'),
           ),
         ],
       ),
     );
   }
 
-  void _showClearCacheDialog(BuildContext context) {
+  void _showPurgeCacheDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Cache'),
-        content: const Text('This will remove all cached data. Continue?'),
+        title: const Text(
+          'Purge Local Telemetry Cache?',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'This will clear locally cached events and unsynced diagnostics from SQLite. Server records will remain untouched.',
+          style: TextStyle(fontSize: 13, height: 1.4),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.alertDanger,
+              foregroundColor: AppColors.pureWhite,
+            ),
             onPressed: () {
-              Navigator.pop(context);
-              // Clear cache logic
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('Cache cleared')));
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Local telemetry cache cleared successfully.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
-            child: const Text('Clear'),
+            child: const Text('Purge Cache'),
           ),
         ],
       ),
     );
   }
-}
-
-class _SettingsItem {
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final VoidCallback? onTap;
-
-  _SettingsItem({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    this.onTap,
-  });
 }

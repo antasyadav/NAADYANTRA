@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import logging
+import os
 import uvicorn
 
 from backend.config import settings
@@ -91,9 +92,10 @@ async def root():
 
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", settings.server_port))
     uvicorn.run(
         "backend.main:app",
-        host=settings.server_host,
-        port=settings.server_port,
-        reload=True if settings.environment == "development" else False
+        host="0.0.0.0",
+        port=port,
+        reload=settings.environment == "development"
     )

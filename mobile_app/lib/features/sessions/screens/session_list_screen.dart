@@ -1,10 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/motion_tokens.dart';
 import '../../../shared/models/session.dart';
 import '../../../shared/models/common.dart';
 import '../../../shared/services/providers.dart';
+import '../../../shared/widgets/industrial_card.dart';
+import '../../../shared/widgets/status_pill.dart';
+import '../../../shared/widgets/state_views.dart';
+import '../../../shared/motion/staggered_entrance.dart';
+import '../../../shared/motion/tactile_pressable.dart';
+
+final sessionsProvider =
+    FutureProvider.family<PaginatedResponse<Session>, String>((
+      ref,
+      params,
+    ) async {
+      final parts = params.split(',');
+      final page = int.tryParse(parts[0]) ?? 1;
+      final pageSize = parts.length > 1 ? (int.tryParse(parts[1]) ?? 20) : 20;
+      final repo = ref.watch(sessionRepositoryProvider);
+      return await repo.getSessions(page: page, pageSize: pageSize);
+    });
 
 class SessionListScreen extends ConsumerStatefulWidget {
   const SessionListScreen({super.key});
@@ -16,192 +36,271 @@ class SessionListScreen extends ConsumerStatefulWidget {
 class _SessionListScreenState extends ConsumerState<SessionListScreen> {
   int _currentPage = 1;
   final int _pageSize = 20;
+  String _filterStatus = 'ALL'; // ALL, ACTIVE, COMPLETED
 
   @override
   Widget build(BuildContext context) {
     final sessionsAsync = ref.watch(
       sessionsProvider('$_currentPage,$_pageSize'),
     );
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Session History'),
+        title: const Text('SESSION ARCHIVE'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Sync Archive',
             onPressed: () => _refreshSessions(),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: sessionsAsync.when(
-        data: (paginatedResponse) {
-          if (paginatedResponse.items.isEmpty) {
-            return _buildEmptyState(context);
-          }
-
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  itemCount: paginatedResponse.items.length,
-                  itemBuilder: (context, index) {
-                    final session = paginatedResponse.items[index];
-                    return _buildSessionCard(context, session);
-                  },
+      body: Column(
+        children: [
+          // Filter Tabs Bar with Animated Smooth Selection
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.pureWhite,
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? AppColors.darkBorder : AppColors.warmStone,
                 ),
               ),
-              if (paginatedResponse.total > _pageSize)
-                _buildPagination(context, paginatedResponse),
-            ],
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => _buildErrorState(context, error.toString()),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.history, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            'No Sessions Found',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Start a session on the device to see history here',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _refreshSessions,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Refresh'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context, String error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-          const SizedBox(height: 16),
-          Text(
-            'Failed to Load Sessions',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              error,
-              style: const TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
+            ),
+            child: Row(
+              children: [
+                _buildFilterChip('ALL', 'All Sessions'),
+                const SizedBox(width: 8),
+                _buildFilterChip('ACTIVE', 'In Progress'),
+                const SizedBox(width: 8),
+                _buildFilterChip('COMPLETED', 'Completed'),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _refreshSessions,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+
+          // Main Session Content Area
+          Expanded(
+            child: sessionsAsync.when(
+              data: (paginatedResponse) {
+                var items = paginatedResponse.items;
+                if (_filterStatus == 'ACTIVE') {
+                  items = items.where((s) => s.isActive).toList();
+                } else if (_filterStatus == 'COMPLETED') {
+                  items = items.where((s) => !s.isActive).toList();
+                }
+
+                if (items.isEmpty) {
+                  return IndustrialEmptyView(
+                    icon: Icons.history_rounded,
+                    title: 'No Sessions Found',
+                    message: _filterStatus == 'ALL'
+                        ? 'Trigger a physical inspection run to archive telemetry.'
+                        : 'No sessions matching filter $_filterStatus.',
+                    actionLabel: 'Refresh Archive',
+                    onAction: _refreshSessions,
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final session = items[index];
+                    return StaggeredEntrance(
+                      index: index,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TactilePressable(
+                          onTap: () => _navigateToSessionDetail(session),
+                          child: _buildSessionCard(context, session),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => const IndustrialLoadingView(
+                message: 'Loading telemetry archive...',
+              ),
+              error: (error, _) => IndustrialErrorView(
+                title: 'Archive Retrieval Error',
+                message: error.toString(),
+                onRetry: _refreshSessions,
+              ),
+            ),
+          ),
+
+          // Pagination Footer Bar
+          sessionsAsync.maybeWhen(
+            data: (response) {
+              if (response.total <= _pageSize) return const SizedBox.shrink();
+              return _buildPagination(context, response);
+            },
+            orElse: () => const SizedBox.shrink(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSessionCard(BuildContext context, Session session) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: InkWell(
-        onTap: () => _navigateToSessionDetail(session),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: session.isActive
-                          ? Colors.green.withValues(alpha: 0.1)
-                          : Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: session.isActive ? Colors.green : Colors.blue,
-                      ),
-                    ),
-                    child: Text(
-                      session.isActive ? 'Active' : 'Completed',
-                      style: TextStyle(
-                        color: session.isActive ? Colors.green : Colors.blue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
+  Widget _buildFilterChip(String value, String label) {
+    final isSelected = _filterStatus == value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _filterStatus = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: MotionTokens.durationFast,
+        curve: MotionTokens.curveDecelerate,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.burntOrange
+              : isDark
+                  ? AppColors.darkSurfaceElevated
+                  : AppColors.industrialIvory,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.burntOrange
+                : isDark
+                    ? AppColors.darkBorder
+                    : AppColors.warmStone,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.burntOrange.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Session #${session.sessionId}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildInfoRow(context, 'Device', session.deviceId),
-              _buildInfoRow(context, 'Trainee', session.traineeId),
-              _buildInfoRow(
-                context,
-                'Started',
-                DateFormat('MMM d, HH:mm').format(session.startedAt),
-              ),
-              if (session.endedAt != null)
-                _buildInfoRow(
-                  context,
-                  'Duration',
-                  _formatDuration(session.duration),
-                ),
-            ],
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected
+                ? AppColors.pureWhite
+                : isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.carbon,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
+  Widget _buildSessionCard(BuildContext context, Session session) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return IndustrialCard(
+      title: 'SESSION #${session.sessionId}',
+      subtitle: DateFormat('yyyy-MM-dd • HH:mm:ss').format(session.startedAt),
+      trailing: StatusPill(
+        label: session.isActive ? 'ACTIVE' : 'COMPLETED',
+        type: session.isActive ? StatusType.active : StatusType.completed,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
-            ),
+          Row(
+            children: [
+              _buildDataPill(
+                icon: Icons.memory_rounded,
+                label: 'Probe: ${session.deviceId}',
+                isDark: isDark,
+              ),
+              const SizedBox(width: 8),
+              _buildDataPill(
+                icon: Icons.person_outline_rounded,
+                label: 'Trainee: ${session.traineeId}',
+                isDark: isDark,
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                session.isActive
+                    ? 'Status: Streaming telemetry…'
+                    : 'Session Finalized',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle:
+                      session.isActive ? FontStyle.italic : FontStyle.normal,
+                  color: session.isActive
+                      ? AppColors.alertWarning
+                      : AppColors.warmGraphite,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Row(
+                children: [
+                  Text(
+                    'View Diagnostics',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.burntOrange,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 14,
+                    color: AppColors.burntOrange,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataPill({
+    required IconData icon,
+    required String label,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurfaceElevated : AppColors.industrialIvory,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.warmStone,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppColors.warmGraphite),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -216,36 +315,42 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
     final totalPages = (response.total / _pageSize).ceil();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.darkSurface
+            : AppColors.pureWhite,
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? AppColors.darkBorder
+                : AppColors.warmStone,
+          ),
+        ),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Page $_currentPage of $totalPages (${response.total} total)',
-            style: const TextStyle(color: Colors.grey, fontSize: 13),
+            'Page $_currentPage of $totalPages (${response.total} runs)',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.warmGraphite,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.chevron_left),
+                icon: const Icon(Icons.chevron_left_rounded),
                 onPressed: _currentPage > 1
-                    ? () {
-                        setState(() {
-                          _currentPage--;
-                        });
-                        _refreshSessions();
-                      }
+                    ? () => setState(() => _currentPage--)
                     : null,
               ),
               IconButton(
-                icon: const Icon(Icons.chevron_right),
+                icon: const Icon(Icons.chevron_right_rounded),
                 onPressed: _currentPage < totalPages
-                    ? () {
-                        setState(() {
-                          _currentPage++;
-                        });
-                        _refreshSessions();
-                      }
+                    ? () => setState(() => _currentPage++)
                     : null,
               ),
             ],
@@ -255,35 +360,11 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
     );
   }
 
-  String _formatDuration(Duration? duration) {
-    if (duration == null) return 'N/A';
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    }
-    return '${minutes}m';
+  void _navigateToSessionDetail(Session session) {
+    context.push('/sessions/${session.sessionId}');
   }
 
   void _refreshSessions() {
     ref.invalidate(sessionsProvider('$_currentPage,$_pageSize'));
   }
-
-  void _navigateToSessionDetail(Session session) {
-    // Navigate to session detail using GoRouter
-    // context.go('/sessions/${session.id}');
-  }
 }
-
-// Provider for sessions
-final sessionsProvider =
-    FutureProvider.family<PaginatedResponse<Session>, String>((
-      ref,
-      params,
-    ) async {
-      final parts = params.split(',');
-      final page = int.parse(parts[0]);
-      final pageSize = int.parse(parts[1]);
-      final sessionRepo = ref.watch(sessionRepositoryProvider);
-      return await sessionRepo.getSessions(page: page, pageSize: pageSize);
-    });

@@ -9,12 +9,11 @@ abstract class AppException implements Exception {
 }
 
 class NetworkException extends AppException {
-  NetworkException(String message) : super(message);
+  NetworkException(super.message);
 }
 
 class ServerException extends AppException {
-  ServerException(String message, [int? statusCode])
-    : super(message, statusCode);
+  ServerException(super.message, [super.statusCode]);
 }
 
 class UnauthorizedException extends AppException {
@@ -34,9 +33,9 @@ class ValidationException extends AppException {
 }
 
 class CacheException extends AppException {
-  CacheException(String message) : super(message);
+  CacheException(super.message);
 }
 
 class AuthenticationException extends AppException {
-  AuthenticationException(String message) : super(message);
+  AuthenticationException(super.message);
 }
