@@ -15,6 +15,7 @@ import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
 import '../../../shared/backgrounds/diagnostic_radar_sweep.dart';
 import '../../../shared/backgrounds/ambient_depth_canvas.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final singleDeviceStatusProvider =
     FutureProvider.family<DeviceStatus, String>((ref, deviceId) async {
@@ -61,8 +62,11 @@ class DeviceDetailsScreen extends ConsumerWidget {
         data: (status) {
           final isOnline = status.isOnline;
 
-          return ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          return AnimatedScreenBackground(
+            theme: ScreenBackgroundTheme.circuitTrace,
+            intensity: 0.8,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
               // Main Hardware Status Card with Diagnostic Radar Sweep
               StaggeredEntrance(
@@ -369,6 +373,7 @@ class DeviceDetailsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
             ],
+            ),
           );
         },
         loading: () => const IndustrialLoadingView(
@@ -389,16 +394,20 @@ class DeviceDetailsScreen extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.warmGraphite,
+          Flexible(
+            flex: 2,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.warmGraphite,
+              ),
             ),
           ),
+          const SizedBox(width: 12),
           Flexible(
+            flex: 3,
             child: Text(
               value,
               textAlign: TextAlign.end,
@@ -406,6 +415,8 @@ class DeviceDetailsScreen extends ConsumerWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
             ),
           ),
         ],

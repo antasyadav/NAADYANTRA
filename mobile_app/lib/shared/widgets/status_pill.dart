@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/motion_tokens.dart';
 
 enum StatusType {
   online,
@@ -13,7 +14,7 @@ enum StatusType {
   neutral,
 }
 
-class StatusPill extends StatelessWidget {
+class StatusPill extends StatefulWidget {
   final String label;
   final StatusType type;
   final bool showDot;
@@ -26,13 +27,71 @@ class StatusPill extends StatelessWidget {
   });
 
   @override
+  State<StatusPill> createState() => _StatusPillState();
+}
+
+class _StatusPillState extends State<StatusPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+
+    _pulseAnimation = Tween<double>(begin: 0.85, end: 1.25).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    final shouldAnimate = widget.showDot &&
+        (widget.type == StatusType.online ||
+            widget.type == StatusType.active ||
+            widget.type == StatusType.danger ||
+            widget.type == StatusType.caution ||
+            widget.type == StatusType.ok);
+
+    if (shouldAnimate) {
+      _pulseController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant StatusPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final shouldAnimate = widget.showDot &&
+        (widget.type == StatusType.online ||
+            widget.type == StatusType.active ||
+            widget.type == StatusType.danger ||
+            widget.type == StatusType.caution ||
+            widget.type == StatusType.ok);
+
+    if (shouldAnimate && !_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    } else if (!shouldAnimate && _pulseController.isAnimating) {
+      _pulseController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isReduced = MotionTokens.isReducedMotion(context);
+
     Color bg;
     Color border;
     Color text;
     Color dot;
 
-    switch (type) {
+    switch (widget.type) {
       case StatusType.online:
       case StatusType.ok:
       case StatusType.active:
@@ -78,16 +137,43 @@ class StatusPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showDot) ...[
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-            ),
+          if (widget.showDot) ...[
+            if (isReduced)
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+              )
+            else
+              AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, _) => Container(
+                  width: 8,
+                  height: 8,
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 6 * _pulseAnimation.value,
+                    height: 6 * _pulseAnimation.value,
+                    decoration: BoxDecoration(
+                      color: dot,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: dot.withValues(
+                            alpha: (_pulseAnimation.value - 0.7).clamp(0.0, 0.6),
+                          ),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(width: 6),
           ],
           Text(
-            label,
+            widget.label,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,

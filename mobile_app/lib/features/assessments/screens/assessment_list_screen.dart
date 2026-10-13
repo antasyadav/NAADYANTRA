@@ -11,6 +11,7 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/state_views.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/tactile_pressable.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final assessmentsProvider =
     FutureProvider.autoDispose<PaginatedResponse<Assessment>>((ref) async {
@@ -38,7 +39,10 @@ class AssessmentListScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: assessmentsAsync.when(
+      body: AnimatedScreenBackground(
+        theme: ScreenBackgroundTheme.blueprintIso,
+        intensity: 0.75,
+        child: assessmentsAsync.when(
         data: (paginatedResponse) {
           final items = paginatedResponse.items;
           if (items.isEmpty) {
@@ -141,6 +145,7 @@ class AssessmentListScreen extends ConsumerWidget {
           message: error.toString(),
           onRetry: () => ref.invalidate(assessmentsProvider),
         ),
+      ),
       ),
     );
   }

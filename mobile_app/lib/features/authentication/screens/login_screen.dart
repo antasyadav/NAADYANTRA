@@ -7,9 +7,8 @@ import '../../../shared/services/providers.dart';
 import '../../../shared/widgets/industrial_button.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
-import '../../../shared/backgrounds/technical_grid_background.dart';
-import '../../../shared/backgrounds/acoustic_signal_field.dart';
 import '../../../shared/backgrounds/ambient_depth_canvas.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -54,26 +53,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: isDark
           ? AppColors.darkCanvas
           : AppColors.industrialIvory,
-      body: Stack(
-        children: [
-          // Background 1: Technical Coordinate Grid
-          const Positioned.fill(
-            child: TechnicalGridBackground(
-              gridSpacing: 40.0,
-              opacity: 0.65,
-              showScanLine: true,
-            ),
-          ),
-
-          // Background 2: Acoustic Frequency Field
-          const Positioned.fill(
-            child: IgnorePointer(
-              child: AcousticSignalField(opacity: 0.50, animate: true),
-            ),
-          ),
-
-          // Foreground Content
-          SafeArea(
+      body: AnimatedScreenBackground(
+        theme: ScreenBackgroundTheme.auth,
+        intensity: 0.9,
+        child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
@@ -410,8 +393,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      );
+    }
 }

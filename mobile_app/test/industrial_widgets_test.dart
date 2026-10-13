@@ -97,6 +97,8 @@ void main() {
         ),
       );
 
+      await tester.pumpAndSettle();
+
       expect(find.text('SAMPLING FREQ'), findsOneWidget);
       expect(find.text('192.0'), findsOneWidget);
       expect(find.text('kHz'), findsOneWidget);

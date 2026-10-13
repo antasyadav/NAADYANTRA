@@ -15,8 +15,10 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../core/config/app_config.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
+import '../../../shared/motion/animated_fft_spectrum.dart';
 import '../../../shared/backgrounds/diagnostic_radar_sweep.dart';
 import '../../../shared/backgrounds/acoustic_signal_field.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final deviceStatusProvider =
     FutureProvider.autoDispose<DeviceStatus>((ref) async {
@@ -147,9 +149,12 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: ListView(
+      body: AnimatedScreenBackground(
+        theme: ScreenBackgroundTheme.liveSonar,
+        intensity: 0.75,
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
+          child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
             // Live Status Banner
@@ -275,6 +280,35 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
                         ),
                       ],
                     ),
+                    SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '16-BAND ULTRASONIC FFT SPECTRUM',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: AppColors.warmGraphite,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          '28-38 kHz Leak Window',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.burntOrange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 6),
+                    AnimatedFftSpectrum(height: 38),
                   ],
                 ),
               ),
@@ -307,6 +341,7 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
             ),
             const SizedBox(height: 24),
           ],
+        ),
         ),
       ),
     );
@@ -589,15 +624,18 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      (event.cause ?? 'ANOMALY').toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Text(
+                        (event.cause ?? 'ANOMALY').toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       DateFormat('HH:mm:ss').format(event.serverTimestamp),
                       style: const TextStyle(
@@ -711,25 +749,24 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.psychology_alt_rounded,
-                          size: 16,
-                          color: AppColors.burntOrange,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'ONNX Model Leak Signature Score',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      Icons.psychology_alt_rounded,
+                      size: 16,
+                      color: AppColors.burntOrange,
                     ),
+                    const SizedBox(width: 6),
+                    const Flexible(
+                      child: Text(
+                        'ONNX Model Leak Signature Score',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Spacer(),
                     Text(
                       '$leakScore%',
                       style: TextStyle(
@@ -814,23 +851,20 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
               ),
             )
           else
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: IndustrialButton(
-                    label: 'Simulate Nominal',
-                    icon: Icons.check_circle_outline_rounded,
-                    variant: IndustrialButtonVariant.secondary,
-                    onPressed: () => _simulateTelemetry(isLeak: false),
-                  ),
+                IndustrialButton(
+                  label: 'Simulate Nominal Baseline',
+                  icon: Icons.check_circle_outline_rounded,
+                  variant: IndustrialButtonVariant.secondary,
+                  onPressed: () => _simulateTelemetry(isLeak: false),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: IndustrialButton(
-                    label: 'Trigger Leak Burst',
-                    icon: Icons.warning_amber_rounded,
-                    onPressed: () => _simulateTelemetry(isLeak: true),
-                  ),
+                const SizedBox(height: 8),
+                IndustrialButton(
+                  label: 'Trigger Ultrasonic Leak Burst',
+                  icon: Icons.warning_amber_rounded,
+                  onPressed: () => _simulateTelemetry(isLeak: true),
                 ),
               ],
             ),

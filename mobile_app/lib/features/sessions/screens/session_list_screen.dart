@@ -13,6 +13,7 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/state_views.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/tactile_pressable.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final sessionsProvider =
     FutureProvider.family<PaginatedResponse<Session>, String>((
@@ -58,8 +59,11 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
+      body: AnimatedScreenBackground(
+        theme: ScreenBackgroundTheme.dataStream,
+        intensity: 0.7,
+        child: Column(
+          children: [
           // Filter Tabs Bar with Animated Smooth Selection
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -145,7 +149,8 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
             },
             orElse: () => const SizedBox.shrink(),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

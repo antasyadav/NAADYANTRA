@@ -20,6 +20,7 @@ import '../../../shared/widgets/state_views.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
 import '../../../shared/backgrounds/ambient_depth_canvas.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final sessionDetailsProvider =
     FutureProvider.family<Session, int>((ref, sessionId) async {
@@ -176,8 +177,11 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return AnimatedScreenBackground(
+      theme: ScreenBackgroundTheme.spectralMatrix,
+      intensity: 0.75,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
         // Session Header Card
         StaggeredEntrance(
@@ -211,6 +215,7 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
         ),
         const SizedBox(height: 24),
       ],
+      ),
     );
   }
 

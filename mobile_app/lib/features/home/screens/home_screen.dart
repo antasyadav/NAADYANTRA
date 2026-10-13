@@ -10,8 +10,7 @@ import '../../../shared/widgets/metric_readout.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
 import '../../../shared/motion/tactile_pressable.dart';
-import '../../../shared/backgrounds/technical_grid_background.dart';
-import '../../../shared/backgrounds/acoustic_signal_field.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../../inspection/screens/inspection_screen.dart';
 import '../../sessions/screens/session_list_screen.dart';
@@ -144,28 +143,12 @@ class _HomeTab extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: Stack(
-        children: [
-          // Background 1: Coordinate Grid with continuous laser scanning sweep
-          const Positioned.fill(
-            child: TechnicalGridBackground(
-              gridSpacing: 44.0,
-              opacity: 0.5,
-              showScanLine: true,
-            ),
-          ),
-          // Background 2: Acoustic Harmonic Waves drifting continuously
-          const Positioned.fill(
-            child: AcousticSignalField(
-              opacity: 0.45,
-              animate: true,
-            ),
-          ),
-
-          // Main Scrollable Dashboard
-          ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            children: [
+      body: AnimatedScreenBackground(
+        theme: ScreenBackgroundTheme.overview,
+        intensity: 0.85,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          children: [
               // Greeting Banner Card
               StaggeredEntrance(
                 index: 0,
@@ -607,10 +590,9 @@ class _HomeTab extends ConsumerWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      );
+    }
 
   Widget _buildActivityTile(
     BuildContext context, {

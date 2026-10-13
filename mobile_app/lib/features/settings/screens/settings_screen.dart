@@ -9,6 +9,7 @@ import '../../../shared/widgets/industrial_card.dart';
 import '../../../shared/widgets/industrial_button.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/motion/staggered_entrance.dart';
+import '../../../shared/backgrounds/animated_screen_background.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -22,8 +23,11 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('WORKSTATION SETTINGS')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      body: AnimatedScreenBackground(
+        theme: ScreenBackgroundTheme.minimalTuning,
+        intensity: 0.7,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
           // Operator Profile Card
           StaggeredEntrance(
@@ -259,6 +263,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -285,31 +290,34 @@ class SettingsScreen extends ConsumerWidget {
     Widget? trailing,
     VoidCallback? onTap,
   }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppColors.burntOrange.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.burntOrange.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: AppColors.burntOrange, size: 20),
         ),
-        child: Icon(icon, color: AppColors.burntOrange, size: 20),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        subtitle: subtitle != null
+            ? Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.warmGraphite,
+                ),
+              )
+            : null,
+        trailing: trailing,
+        onTap: onTap,
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.warmGraphite,
-              ),
-            )
-          : null,
-      trailing: trailing,
-      onTap: onTap,
     );
   }
 
