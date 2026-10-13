@@ -49,8 +49,9 @@ class _ArcGaugePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
-    final cy = size.height * 0.72;
-    final radius = size.width * 0.42;
+    final cy = size.height * 0.80;
+    // Radius capped so arc never escapes the widget bounds vertically
+    final radius = math.min(size.width * 0.38, cy - 8);
     const startAngle = math.pi * 1.1;
     const sweepMax = math.pi * 0.8;
 
@@ -242,7 +243,7 @@ class _AnimatedArcGaugeState extends State<_AnimatedArcGauge>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return RepaintBoundary(
       child: SizedBox(
-        height: 120,
+        height: 100,
         width: double.infinity,
         child: AnimatedBuilder(
           animation: _anim,
