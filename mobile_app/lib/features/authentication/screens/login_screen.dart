@@ -66,13 +66,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
 
           // Background 2: Acoustic Frequency Field
-          const Positioned(
-            top: 20,
-            left: 0,
-            right: 0,
-            height: 140,
+          const Positioned.fill(
             child: IgnorePointer(
-              child: AcousticSignalField(opacity: 0.45, animate: true),
+              child: AcousticSignalField(opacity: 0.50, animate: true),
             ),
           ),
 

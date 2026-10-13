@@ -69,15 +69,21 @@ class _TechnicalGridBackgroundState extends State<TechnicalGridBackground>
     final isReduced = MotionTokens.isReducedMotion(context);
 
     return RepaintBoundary(
-      child: CustomPaint(
-        painter: _TechnicalGridPainter(
-          progress: isReduced || !widget.showScanLine ? 0.0 : _controller.value,
-          gridSpacing: widget.gridSpacing,
-          isDark: isDark,
-          opacity: widget.opacity,
-          showScanLine: widget.showScanLine && !isReduced,
-        ),
-        child: widget.child,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _TechnicalGridPainter(
+              progress:
+                  isReduced || !widget.showScanLine ? 0.0 : _controller.value,
+              gridSpacing: widget.gridSpacing,
+              isDark: isDark,
+              opacity: widget.opacity,
+              showScanLine: widget.showScanLine && !isReduced,
+            ),
+            child: widget.child,
+          );
+        },
       ),
     );
   }
@@ -147,7 +153,7 @@ class _TechnicalGridPainter extends CustomPainter {
     // Slow scanning line beam
     if (showScanLine) {
       final scanY = size.height * progress;
-      final scanRect = Rect.fromLTWH(0, scanY - 30, size.width, 60);
+      final scanRect = Rect.fromLTWH(0, scanY - 45, size.width, 90);
 
       final scanPaint = Paint()
         ..shader = LinearGradient(
@@ -155,7 +161,7 @@ class _TechnicalGridPainter extends CustomPainter {
           end: Alignment.bottomCenter,
           colors: [
             AppColors.burntOrange.withValues(alpha: 0.0),
-            AppColors.burntOrange.withValues(alpha: 0.05 * opacity),
+            AppColors.burntOrange.withValues(alpha: 0.16 * opacity),
             AppColors.burntOrange.withValues(alpha: 0.0),
           ],
         ).createShader(scanRect);
@@ -163,9 +169,9 @@ class _TechnicalGridPainter extends CustomPainter {
       canvas.drawRect(scanRect, scanPaint);
 
       final lineBeamPaint = Paint()
-        ..color = AppColors.burntOrange.withValues(alpha: 0.25 * opacity)
+        ..color = AppColors.burntOrange.withValues(alpha: 0.60 * opacity)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0;
+        ..strokeWidth = 1.6;
 
       canvas.drawLine(
         Offset(0, scanY),

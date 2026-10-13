@@ -67,21 +67,26 @@ class _DiagnosticRadarSweepState extends State<DiagnosticRadarSweep>
     final isReduced = MotionTokens.isReducedMotion(context);
 
     return RepaintBoundary(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: Size(widget.size, widget.size),
-            painter: _RadarSweepPainter(
-              angle: isReduced || !widget.isScanning
-                  ? math.pi * 0.25
-                  : _controller.value * 2 * math.pi,
-              isDark: isDark,
-              isScanning: widget.isScanning && !isReduced,
-            ),
-          ),
-          if (widget.centerWidget != null) widget.centerWidget!,
-        ],
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: Size(widget.size, widget.size),
+                painter: _RadarSweepPainter(
+                  angle: isReduced || !widget.isScanning
+                      ? math.pi * 0.25
+                      : _controller.value * 2 * math.pi,
+                  isDark: isDark,
+                  isScanning: widget.isScanning && !isReduced,
+                ),
+              ),
+              if (widget.centerWidget != null) widget.centerWidget!,
+            ],
+          );
+        },
       ),
     );
   }

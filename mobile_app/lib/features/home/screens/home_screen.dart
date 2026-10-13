@@ -11,6 +11,7 @@ import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
 import '../../../shared/motion/tactile_pressable.dart';
 import '../../../shared/backgrounds/technical_grid_background.dart';
+import '../../../shared/backgrounds/acoustic_signal_field.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../../inspection/screens/inspection_screen.dart';
 import '../../sessions/screens/session_list_screen.dart';
@@ -145,12 +146,19 @@ class _HomeTab extends ConsumerWidget {
       ),
       body: Stack(
         children: [
-          // Background: Subtle Technical Coordinate Grid
+          // Background 1: Coordinate Grid with continuous laser scanning sweep
           const Positioned.fill(
             child: TechnicalGridBackground(
-              gridSpacing: 48.0,
-              opacity: 0.35,
-              showScanLine: false,
+              gridSpacing: 44.0,
+              opacity: 0.5,
+              showScanLine: true,
+            ),
+          ),
+          // Background 2: Acoustic Harmonic Waves drifting continuously
+          const Positioned.fill(
+            child: AcousticSignalField(
+              opacity: 0.45,
+              animate: true,
             ),
           ),
 

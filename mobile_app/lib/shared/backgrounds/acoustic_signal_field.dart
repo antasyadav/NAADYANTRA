@@ -69,15 +69,20 @@ class _AcousticSignalFieldState extends State<AcousticSignalField>
     final isReduced = MotionTokens.isReducedMotion(context);
 
     return RepaintBoundary(
-      child: CustomPaint(
-        painter: _AcousticSignalPainter(
-          phase: isReduced || !widget.animate
-              ? 0.0
-              : _controller.value * 2 * math.pi,
-          isDark: isDark,
-          opacity: widget.opacity,
-        ),
-        child: widget.child,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _AcousticSignalPainter(
+              phase: isReduced || !widget.animate
+                  ? 0.0
+                  : _controller.value * 2 * math.pi,
+              isDark: isDark,
+              opacity: widget.opacity,
+            ),
+            child: widget.child,
+          );
+        },
       ),
     );
   }
@@ -101,24 +106,24 @@ class _AcousticSignalPainter extends CustomPainter {
     // Harmonic 1 (Primary Burnt Orange probe frequency)
     final path1 = Path();
     final paint1 = Paint()
-      ..color = AppColors.burntOrange.withValues(alpha: 0.45 * opacity)
+      ..color = AppColors.burntOrange.withValues(alpha: 0.65 * opacity)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6;
+      ..strokeWidth = 2.0;
 
     // Harmonic 2 (Secondary Subharmonic Warm Stone / Graphite)
     final path2 = Path();
     final paint2 = Paint()
       ..color = (isDark ? AppColors.darkTextSecondary : AppColors.warmGraphite)
-          .withValues(alpha: 0.25 * opacity)
+          .withValues(alpha: 0.35 * opacity)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 1.4;
 
     // Harmonic 3 (Ultra-high frequency acoustic burst carrier)
     final path3 = Path();
     final paint3 = Paint()
-      ..color = AppColors.darkBurntOrange.withValues(alpha: 0.3 * opacity)
+      ..color = AppColors.darkBurntOrange.withValues(alpha: 0.45 * opacity)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 1.6;
 
     const points = 80;
     final step = size.width / points;
