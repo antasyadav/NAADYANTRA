@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -80,13 +81,17 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen>
 
     return Scaffold(
       appBar: AppBar(
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                tooltip: 'Back',
-                onPressed: () => Navigator.of(context).pop(),
-              )
-            : null,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          tooltip: 'Back',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        ),
         title: Text('NODE: ${widget.deviceId}'),
         actions: [
           IconButton(
