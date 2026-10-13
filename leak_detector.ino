@@ -1,66 +1,31 @@
 /*
  * =============================================================================
- *  LEAK / HAZARD DETECTOR  -  ESP32 firmware v1.1.0
- *  SIH 2026 | PS 26244 | trainee-friendly diagnostic sensing device
+ *  NAADYANTRA: Multi-Modal Acoustic & Hazardous Environment Diagnostic Firmware
+ *  Platform: ESP32-S3 / ESP32 DevKit (Dual-Core 240MHz Xtensa)
+ *  SIH 2026 - Problem Statement: PS26244
+ *  Firmware Version: 1.1.0
  * =============================================================================
- *  Flow:
- *    Piezo (pipe pe chipka) -> ADC -> DC-block -> ring buffer -> TinyML (leak/noise/normal)
- *    MQ gas + moisture probe -> baseline + threshold + hysteresis (+ Rs/R0, optional %LEL)
- *    Welding module (optional): MLX90614 IR heat + GUVA UV
- *                      |
- *                      v
- *            FUSION (priority + debounce)
- *                      |
- *      OLED + LED + buzzer + vibration + Geiger-style locate beep
- *      |  session log -> HTTP(S) backend (FastAPI trainer dashboard)
  *
- *  v1.1.0 me naya:
- *   - Localisation: Geiger-style beep (signal jitna tez, beep utni tez) -> handheld ghumake leak point dhundo
- *   - Welding/gas-cutting module: heat (MLX90614) + UV (GUVA-S12SD) alerts, proximity cue beep
- *   - Backend logging (Firebase hata), device key header, per-item trainee ID (queue me safe)
- *   - Runtime trainee ID: Serial Monitor me  id T005  (session band ho tab)
- *   - Gas: Rs/R0 logging + optional ppm / %LEL (GAS_CAL_VALID, apni calibration ke baad)
- *   - Moisture probe sirf padhte waqt power hota hai (corrosion kam)
+ * Architecture:
+ *  1. Acoustic Pipeline:
+ *     Contact Piezo -> 12-bit ADC1 -> IIR DC-Block Filter -> Ring Buffer -> TinyML / RMS
+ *  2. Environmental Hazards:
+ *     MQ Combustible Gas (Rs/R0 & %LEL) + Soil/Pipe Moisture Conduction Probe
+ *  3. Thermal / Optical Safety:
+ *     MLX90614 Non-Contact IR Pyrometer + GUVA-S12SD UV Radiometer
+ *  4. Sensor Fusion:
+ *     Multi-Tiered Priority Matrix + Temporal Debounce Windows
+ *  5. Actuation & Localisation:
+ *     SSD1306 OLED, Status LEDs, Tactile Vibration Motor, Variable-Pitch Audio Cue
+ *  6. Telemetry & Cloud Synchronization:
+ *     Thread-Safe FreeRTOS Queue -> HTTP(S) REST Dispatch to FastAPI Workstation
  *
- *  NOTE: Ye training aid hai, certified gas detector ka replacement nahi.
- *        Asli LPG/gas ya welding arc ke saath khud test mat karo (trainer/lab ki nigrani me).
- *        Heat/UV/gas thresholds ABHI VALIDATED NAHI hain: reference instrument se tune karke hi safety claim karo.
- *
- *  SETUP (ek baar)
- *   1. Arduino IDE -> Boards Manager -> "esp32 by Espressif" version 3.0 ya upar.
- *      Board: ESP32S3 Dev Module | PSRAM: OPI PSRAM (N16R8 ke liye) | USB CDC On Boot: Enabled
- *      (Sketch folder ka naam "leak_detector" hona chahiye.)
- *   2. Library Manager: "Adafruit SSD1306" aur "Adafruit GFX Library".
- *   3. Section 1 me WiFi / BACKEND_URL / DEVICE_KEY / pins / thresholds set karo.
- *   4. Model abhi nahi bana? USE_EDGE_IMPULSE 0 rakho -> simple RMS detector se poora
- *      hardware (OLED, buzzer, gas, logging) test ho jata hai.
- *
- *  TRAINING DATA LENA (model ke liye)
- *   RUN_MODE ko RUN_MODE_COLLECT karo, flash karo, phir PC pe:
- *      edge-impulse-data-forwarder --frequency 4000 --baud-rate 921600
- *   Isse training aur deployment ka signal EXACT same pipeline se guzarta hai
- *   (same ADC, same rate, same DC-block) -> train/deploy mismatch nahi hota.
- *   Edge Impulse me: 1 axis, 4000 Hz, window 1000 ms, increase 500 ms,
- *   classes: no_leak, leak (ya small_leak/large_leak), noise.
- *   Export "Arduino library", install karo, aur neeche #include line me naam likho.
- *
- *  BUTTON (BOOT):  chhota dabao = session start/stop | 2 sec dabao = baseline recalibrate
- *                  (recalibrate hamesha leak-free pipe section pe, welding me arc band hone par karo)
- *  SERIAL (115200): id T005  -> trainee ID badlo (session chal raha ho to nahi badlega)
- *
- *  HARDWARE NOTES (zaroori)
- *   - Piezo: ADC ko 0-3.3V chahiye, piezo AC deta hai. Piezo(-) ko 1.65V bias node se jodo
- *     (3V3--100k--node--100k--GND, node pe 100nF), piezo(+) -> GPIO, GPIO se node tak 1M,
- *     aur GPIO se 3V3/GND tak clamp diodes (BAT54S ya 2x 1N4148).
- *     Piezo signal bahut chhota hota hai: op-amp (gain 20-50) + 1.65V bias MANDATORY samjho.
- *   - MQ sensor ka AO 5V tak jata hai: 10k + 20k divider se 3.3V ke andar rakho (GAS_DIV_FACTOR=1.5).
- *   - Moisture probe: PIN_MOIST_PWR -> probe -> PIN_MOISTURE, aur PIN_MOISTURE se GND tak 100k pulldown.
- *     Seedha 3V3 se jodna ho to MOIST_POWER_GATED 0 karo.
- *   - MLX90614: I2C (SDA/SCL), addr 0x5A, 3.3V. GUVA-S12SD: analog out -> PIN_UV (3.3V sensor).
- *   - Buzzer/vibration motor ko transistor (BC547/2N2222 + 1k) se chalao, motor pe flyback diode.
- *   - Sirf ADC1 pins use karo (WiFi ke saath ADC2 kaam nahi karta).
- *   - WiFi transmit ke time ADC noise badh sakta hai: 100uF cap 3V3 pe lagao.
- *   - Sensors jo abhi jude nahi unke HAS_* flag 0 rakho (floating pin = galat alarm).
+ * Hardware Notes:
+ *  - Contact Piezo: Requires 1.65V virtual ground bias node and op-amp stage (gain 20-50).
+ *  - MQ Gas Sensor: 5V divider stepped down to 3.3V range via 10k/20k resistor network.
+ *  - Moisture Probe: Interleaved excitation pulse via PIN_MOIST_PWR to prevent galvanic corrosion.
+ *  - MLX90614: Direct SMBus transaction @ 100kHz standard I2C clock.
+ *  - Controls: Short press on BOOT toggles active session; long press (>2s) recalibrates baseline.
  */
 
 #include <Arduino.h>
@@ -72,39 +37,39 @@
 #include <esp_random.h>
 
 #if !defined(ESP_ARDUINO_VERSION_MAJOR) || (ESP_ARDUINO_VERSION_MAJOR < 3)
-#error "Arduino-ESP32 core 3.x chahiye (Boards Manager -> 'esp32 by Espressif Systems' >= 3.0.0)"
+#error "Arduino-ESP32 core 3.x required (Boards Manager -> 'esp32 by Espressif Systems' >= 3.0.0)"
 #endif
 
 // =============================================================================
-// 1) SETTINGS  (yahi section edit karna hai)
+// 1) SETTINGS - Hardware Configuration & Thresholds
 // =============================================================================
 #define FW_VERSION  "1.1.0"
 
 #define RUN_MODE_DETECT   0
 #define RUN_MODE_COLLECT  1
-#define RUN_MODE          RUN_MODE_DETECT   // training data lena ho to RUN_MODE_COLLECT
+#define RUN_MODE          RUN_MODE_DETECT   // Set to RUN_MODE_COLLECT for dataset acquisition
 
-#define USE_EDGE_IMPULSE      1   // 0 = bina model ke RMS detector (bring-up / baseline comparison)
-#define USE_REFERENCE_SENSOR  0   // 1 = hawa ka noise pakadne wala 2nd analog sensor (experimental)
+#define USE_EDGE_IMPULSE      1   // 0 = RMS fallback detector, 1 = Edge Impulse TinyML
+#define USE_REFERENCE_SENSOR  0   // Dual microphone ambient noise subtraction
 #define HAS_GAS_SENSOR        1
 #define HAS_MOISTURE_SENSOR   1
-#define HAS_HEAT_SENSOR       0   // 1 = MLX90614 jud chuka hai (welding / gas-cutting module)
-#define HAS_UV_SENSOR         0   // 1 = GUVA-S12SD jud chuka hai
-#define MOIST_POWER_GATED     1   // 1 = probe sirf padhte waqt power (PIN_MOIST_PWR)
+#define HAS_HEAT_SENSOR       0   // MLX90614 contactless IR pyrometer enabled
+#define HAS_UV_SENSOR         0   // GUVA-S12SD analog UV sensor enabled
+#define MOIST_POWER_GATED     1   // Gated excitation pin to prevent electrolytic oxidation
 #define ENABLE_WIFI_LOGGING   1
-#define BUZZER_PASSIVE        0   // 0 = active buzzer, 1 = passive buzzer (PWM tone)
+#define BUZZER_PASSIVE        0   // 0 = Active digital buzzer, 1 = Passive PWM tone
 #define DEBUG_SERIAL          1
 
 // ---- WiFi + Backend ----
 #define WIFI_SSID        "YOUR_WIFI_NAME"
 #define WIFI_PASSWORD    "YOUR_WIFI_PASSWORD"
-#define BACKEND_URL      "http://192.168.1.10:8000"   // laptop ka IP (ya https://deployed-url), last me '/' nahi
-#define DEVICE_KEY       "dev-key-123"                // backend ke DEVICE_KEY se same
+#define BACKEND_URL      "http://192.168.1.10:8000"   // Backend API endpoint URL (no trailing slash)
+#define DEVICE_KEY       "dev-key-123"                // Device authentication secret token
 #define DEVICE_ID        "SIH-DEV-01"
-#define TRAINEE_ID       "T001"    // default; Serial se badal sakte ho. Sirf letters/digits/_/-
+#define TRAINEE_ID       "T001"    // Default operator trainee identifier
 
 // ---- Pins ----
-#if CONFIG_IDF_TARGET_ESP32S3      // ESP32-S3 (N16R8 pe 35,36,37 use nahi hote)
+#if CONFIG_IDF_TARGET_ESP32S3      // ESP32-S3 default pinout mapping
   #define PIN_PIEZO       4        // ADC1
   #define PIN_REFERENCE   7        // ADC1
   #define PIN_GAS         5        // ADC1
@@ -119,7 +84,7 @@
   #define PIN_LED_YELLOW  18
   #define PIN_LED_RED     21
   #define PIN_BUTTON      0        // BOOT button
-#else                              // classic ESP32 DevKit
+#else                              // Classic ESP32 WROOM pinout mapping
   #define PIN_PIEZO       34
   #define PIN_REFERENCE   33
   #define PIN_GAS         35
@@ -137,54 +102,54 @@
 #endif
 
 // ---- Acoustic (piezo) ----
-#define SAMPLE_RATE_HZ        4000   // sirf COLLECT / bina-model mode. Model ke saath EI_CLASSIFIER_FREQUENCY chalta hai
-#define WINDOW_MS             1000   // same
-#define HOP_MS                500    // naya result har itni der me (50% overlap)
+#define SAMPLE_RATE_HZ        4000   // Acoustic sampling frequency (fallback/collect)
+#define WINDOW_MS             1000   // Analysis window length
+#define HOP_MS                500    // Window step hop interval (50% overlap)
 #define DC_BLOCK_R            0.995f
-#define LEAK_PROB_MIN         0.65f  // P(leak) >= iske -> leak vote (NOISE/NORMAL se pehle check hota hai)
+#define LEAK_PROB_MIN         0.65f  // Minimum confidence threshold for leak detection
 #define NOISE_PROB_MIN        0.60f
 #define NORMAL_PROB_MIN       0.60f
-#define LEAK_CONFIRM_WINDOWS  2      // itne lagataar leak windows -> alarm
-#define LEAK_CLEAR_WINDOWS    4      // itne lagataar non-leak windows -> alarm band
-#define MIN_SIGNAL_RMS        0.8f   // isse kam RMS = piezo disconnected / signal nahi (ADC counts)
-#define ANOMALY_MAX           0.3f   // sirf jab EI project me anomaly block ho
-#define FALLBACK_LEAK_RATIO   3.0f   // bina-model mode: RMS >= baseline*ratio -> pakka leak
+#define LEAK_CONFIRM_WINDOWS  2      // Consecutive positive windows to assert leak condition
+#define LEAK_CLEAR_WINDOWS    4      // Consecutive negative windows to clear leak condition
+#define MIN_SIGNAL_RMS        0.8f   // Disconnected sensor fault threshold (ADC counts)
+#define ANOMALY_MAX           0.3f   // Out-of-distribution anomaly threshold
+#define FALLBACK_LEAK_RATIO   3.0f   // Fallback RMS ratio threshold for leak alarm
 #define REF_NOISE_RMS         30.0f
 #define REF_MIN_RATIO         1.5f
 
 // ---- Locate (Geiger-style) beep ----
-#define CUE_RMS_START_RATIO   1.5f   // rms/baseline isse upar beep shuru
-#define CUE_RMS_FULL_RATIO    6.0f   // is ratio pe sabse tez beep
+#define CUE_RMS_START_RATIO   1.5f   // Geiger localization start ratio threshold
+#define CUE_RMS_FULL_RATIO    6.0f   // Geiger localization maximum pulse frequency ratio
 #define CUE_GAP_SLOW_MS       700
 #define CUE_GAP_FAST_MS       80
 #define CUE_BEEP_MS           25
 
-// ---- Gas (MQ) ----  (ADC counts, 0-4095; apne sensor pe tune karo)
-#define GAS_WARMUP_S          60     // heater warm-up (demo me 30 bhi chalega)
-#define GAS_WARN_DELTA        150    // baseline se itna upar = warning
-#define GAS_ALARM_DELTA       400    // baseline se itna upar = alarm
-// Rs/R0 calculation (logging + optional ppm). Module ke hisaab se set karo:
+// ---- Combustible Gas (MQ Sensor Calibration) ---- (ADC raw counts, 0-4095)
+#define GAS_WARMUP_S          60     // Pre-heat stabilization period in seconds
+#define GAS_WARN_DELTA        150    // Warning delta above ambient baseline
+#define GAS_ALARM_DELTA       400    // Critical alarm delta above ambient baseline
+// Load resistor and voltage divider parameters for Rs/R0 calculations
 #define GAS_RL_KOHM           10.0f  // module ka load resistor
 #define GAS_VCC               5.0f   // sensor heater/divider supply
 #define GAS_DIV_FACTOR        1.5f   // (10k+20k)/20k divider
-// Optional calibrated ppm / %LEL. GAS_CAL_VALID tabhi 1 karo jab reference gas meter se
-// ppm = A * (Rs/R0)^B ke A, B nikaal liye hon (lab ki nigrani me). Default 0 = sirf relative delta alarm.
+// Optional calibrated ppm / %LEL curve parameters
+// Set GAS_CAL_VALID to 1 only after calibrating against reference standards
 #define GAS_CAL_VALID         0
 #define GAS_PPM_A             0.0f
 #define GAS_PPM_B             0.0f
-#define GAS_LEL_PPM           18000.0f   // 100% LEL ppm me (LPG ~1.8-2.1% vol: datasheet/standard se verify karo)
-#define GAS_WARN_LEL_PCT      10.0f      // sirf GAS_CAL_VALID=1 me use hota hai (apne standard se verify karo)
+#define GAS_LEL_PPM           18000.0f   // 100% LEL equivalent in ppm for combustible gas
+#define GAS_WARN_LEL_PCT      10.0f      // LEL warning threshold percentage
 #define GAS_ALARM_LEL_PCT     20.0f
 
 // ---- Moisture probe ----
 #define MOIST_WET_DELTA       300
 
-// ---- Welding / gas-cutting module (thresholds validate karne baaki hain) ----
+// ---- Welding & Thermal Radiation Safety Module ----
 #define MLX_ADDR              0x5A
-#define HEAT_CUE_START_C      40.0f  // proximity beep yahan se shuru
+#define HEAT_CUE_START_C      40.0f  // Thermal proximity audio warning start point (deg C)
 #define HEAT_WARN_C           60.0f
 #define HEAT_ALARM_C          100.0f
-#define UV_WARN_DELTA         150    // baseline se ADC counts upar
+#define UV_WARN_DELTA         150    // UV warning delta above baseline
 #define UV_ALARM_DELTA        500
 
 // ---- UI / session / logging ----
@@ -199,8 +164,8 @@
 // =============================================================================
 #if RUN_MODE == RUN_MODE_DETECT
   #if USE_EDGE_IMPULSE
-    #include <YOUR_PROJECT_inferencing.h>   // <<< apni Edge Impulse library ka header yahan likho
-    static_assert(EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME == 1, "Impulse single-axis (sirf piezo) hona chahiye");
+    #include <YOUR_PROJECT_inferencing.h>   // Edge Impulse model header include
+    static_assert(EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME == 1, "Impulse model must be configured for single-axis contact piezo");
   #endif
   #include <Wire.h>
   #include <Adafruit_GFX.h>
@@ -216,7 +181,7 @@
 // 2) TYPES
 // =============================================================================
 enum Role     : uint8_t { ROLE_NORMAL, ROLE_LEAK, ROLE_NOISE, ROLE_UNCERTAIN };
-enum GasLevel : uint8_t { GAS_OK, GAS_WARN, GAS_ALARM };    // gas / heat / UV teeno ke liye reuse
+enum GasLevel : uint8_t { GAS_OK, GAS_WARN, GAS_ALARM };    // Shared alert severity levels across auxiliary sensors
 enum Alert    : uint8_t { ALERT_OK, ALERT_CAUTION, ALERT_DANGER };
 enum Cause    : uint8_t { CAUSE_NONE, CAUSE_STARTUP, CAUSE_UNCERTAIN, CAUSE_NOISE, CAUSE_AMBIENT,
                           CAUSE_FAULT, CAUSE_GAS_WARN, CAUSE_WET, CAUSE_LEAK, CAUSE_GAS_ALARM,
@@ -224,8 +189,8 @@ enum Cause    : uint8_t { CAUSE_NONE, CAUSE_STARTUP, CAUSE_UNCERTAIN, CAUSE_NOIS
 enum LogKind  : uint8_t { LOGK_EVENT, LOGK_SUMMARY };
 
 struct AcousticResult {
-  float    pNormal, pLeak, pNoise;   // class probabilities (role ke hisaab se jodi hui)
-  float    rms, refRms;              // window RMS (ADC counts)
+  float    pNormal, pLeak, pNoise;   // Accumulated class probabilities mapped to operational roles
+  float    rms, refRms;              // Window RMS energy (ADC counts)
   uint16_t inferMs;
   bool     anomalous;
   char     topLabel[20];
@@ -233,7 +198,7 @@ struct AcousticResult {
 
 struct LogItem { uint32_t session; LogKind kind; char trainee[16]; char json[320]; };
 
-// "itni baar lagataar" wala filter: flapping rokta hai
+// Consecutive window debouncer to prevent rapid signal chatter
 struct Debounce {
   uint8_t onN, offN, onCnt, offCnt; bool state;
   Debounce(uint8_t on = 2, uint8_t off = 4) : onN(on), offN(off), onCnt(0), offCnt(0), state(false) {}
@@ -293,7 +258,7 @@ struct App {
 
 // =============================================================================
 // 3) SAMPLING ENGINE  (timer ISR -> sampler task -> ring buffer)
-//    Sirf sampler task ADC padhta hai (piezo + gas + moisture + UV) -> koi ADC race nahi.
+// Dedicated FreeRTOS sampler task handles all ADC channels to eliminate hardware contention.
 // =============================================================================
 static uint32_t gFs = 0, gWin = 0, gHop = 0, gRingMask = 0;
 static int16_t *gRing = nullptr, *gRefRing = nullptr;
@@ -309,7 +274,7 @@ static inline int16_t clamp16(float v) {
   return (int16_t)lrintf(v);
 }
 
-// DC-blocker: piezo bias (~1.65V) hata deta hai. Training aur inference dono me same.
+// First-order IIR DC-blocking filter to remove ~1.65V DC virtual ground offset.
 struct DcBlock {
   float x1 = 0, y1 = 0; bool primed = false;
   float step(float x) {
@@ -332,7 +297,7 @@ static void* allocBig(size_t bytes) {
 
 static void computeSamplingParams() {
 #if RUN_MODE == RUN_MODE_DETECT && USE_EDGE_IMPULSE
-  gFs  = (uint32_t)EI_CLASSIFIER_FREQUENCY;          // model jis rate pe train hua
+  gFs  = (uint32_t)EI_CLASSIFIER_FREQUENCY;          // Model target sampling frequency
   gWin = (uint32_t)EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
 #else
   gFs  = SAMPLE_RATE_HZ;
@@ -341,7 +306,7 @@ static void computeSamplingParams() {
   gHop = (uint32_t)((uint64_t)gFs * HOP_MS / 1000);
   if (gHop < 1) gHop = 1;
   uint32_t cap = 1;
-  while (cap < gWin * 2) cap <<= 1;                  // power of two -> index wrap safe
+  while (cap < gWin * 2) cap <<= 1;                  // Round up to power-of-two for bitwise circular buffer wrapping
   gRingMask = cap - 1;
 }
 
@@ -372,7 +337,7 @@ static void setupAdc() {
     PIN_UV,
 #endif
   };
-  for (uint8_t p : pins) { analogSetPinAttenuation(p, ADC_11db); (void)analogRead(p); }  // lazy init yahin ho jaye
+  for (uint8_t p : pins) { analogSetPinAttenuation(p, ADC_11db); (void)analogRead(p); }  // Pre-initialize ADC channels during setup
 #if HAS_MOISTURE_SENSOR && MOIST_POWER_GATED
   pinMode(PIN_MOIST_PWR, OUTPUT);
   digitalWrite(PIN_MOIST_PWR, LOW);
@@ -381,10 +346,10 @@ static void setupAdc() {
 
 static void samplerInit(SamplerCtx& c) {
   c = SamplerCtx();
-  c.slowDiv = (gFs / 20 < 8) ? 8 : gFs / 20;         // slow sensors ~20 Hz (minimum 8 ticks: phases 0..6 chahiye)
+  c.slowDiv = (gFs / 20 < 8) ? 8 : gFs / 20;         // Sub-sample auxiliary sensors at ~20 Hz
 }
 
-// Ek sample tick ka kaam
+// Single timer tick execution step
 static void samplerStep(SamplerCtx& c) {
   const uint32_t h = gHead.load(std::memory_order_relaxed);
   gRing[h & gRingMask] = clamp16(c.dcMain.step((float)analogRead(PIN_PIEZO)));
@@ -393,10 +358,10 @@ static void samplerStep(SamplerCtx& c) {
 #endif
   gHead.store(h + 1, std::memory_order_release);
 
-  // slow sensors alag-alag ticks me padho taaki sample timing na bigde
+  // Interleave slow sensor reads across sample ticks
   const uint32_t phase = (++c.tick) % c.slowDiv;
 #if HAS_MOISTURE_SENSOR && MOIST_POWER_GATED
-  if (phase == 0) digitalWrite(PIN_MOIST_PWR, HIGH);      // probe power on (phase 3 tak settle)
+  if (phase == 0) digitalWrite(PIN_MOIST_PWR, HIGH);      // Pulse moisture probe power rail to minimize electrolysis
   if (phase == 4) digitalWrite(PIN_MOIST_PWR, LOW);
 #endif
 #if HAS_GAS_SENSOR
@@ -427,7 +392,7 @@ static void samplerTask(void*) {
   samplerInit(c);
   for (;;) {
     const uint32_t pending = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    if (pending > 1) gOverruns.fetch_add(pending - 1, std::memory_order_relaxed);   // tick miss hua
+    if (pending > 1) gOverruns.fetch_add(pending - 1, std::memory_order_relaxed);   // Track missed timer ticks
     samplerStep(c);
   }
 }
@@ -436,12 +401,12 @@ static void startSampling() {
   xTaskCreatePinnedToCore(samplerTask, "sampler", 4096, nullptr, 10, &gSamplerTask, 1);
   gTimer = timerBegin(1000000);                                  // 1 MHz tick
   timerAttachInterrupt(gTimer, &onSampleTimer);
-  timerAlarm(gTimer, 1000000UL / gFs, true, 0);                  // har 1/Fs sec
+  timerAlarm(gTimer, 1000000UL / gFs, true, 0);                  // 1/Fs timer period
 }
 
 #if RUN_MODE == RUN_MODE_COLLECT
 // =============================================================================
-// 4A) COLLECT MODE  - samples Serial pe stream (Edge Impulse data forwarder ke liye)
+// 4A) COLLECT MODE - Stream raw samples over Serial for Edge Impulse ingestion
 // =============================================================================
 void setup() {
   Serial.begin(921600);
@@ -454,7 +419,7 @@ void setup() {
 void loop() {
   static uint32_t tail = 0;
   const uint32_t head = gHead.load(std::memory_order_acquire);
-  if (head - tail > gRingMask - 64) tail = head - gWin;         // bahut pichhad gaye: purane samples chhod do
+  if (head - tail > gRingMask - 64) tail = head - gWin;         // Ring buffer overflow recovery: advance tail pointer
   char buf[512]; size_t len = 0;
   while (tail != head && len + 8 < sizeof(buf)) {
     len += snprintf(buf + len, sizeof(buf) - len, "%d\n", (int)gRing[tail & gRingMask]);
@@ -467,13 +432,13 @@ void loop() {
 // =============================================================================
 // 4B) DETECT MODE
 // =============================================================================
-static std::atomic<float> gRmsBase{0.0f};          // acoustic baseline (locate beep + bina-model mode)
+static std::atomic<float> gRmsBase{0.0f};          // Rolling baseline RMS energy reference
 static QueueHandle_t gResultQ = nullptr, gLogQ = nullptr;
 static volatile bool gWifiUp = false;
 static Adafruit_SSD1306 gOled(128, 64, &Wire, -1);
 static bool gOledOk = false;
 static App app;
-static char gTrainee[16] = TRAINEE_ID;             // runtime me badal sakta hai (Serial: id T005)
+static char gTrainee[16] = TRAINEE_ID;             // Active operator trainee identifier
 static uint32_t gLastCue = 0;
 
 // ---------- helpers ----------
@@ -492,7 +457,7 @@ static float ringRms(const int16_t* ring, uint32_t start, uint32_t n) {
 }
 
 // ---------- pure logic ----------
-// Label naam ka niyam: "no_leak"/"normal"/"idle"/"background" = normal, "leak" wala = leak, "noise" = noise
+// Map model output labels into internal operational roles
 static Role roleOfLabel(const char* l) {
   if (strstr(l, "no_leak") || strstr(l, "normal") || strstr(l, "idle") || strstr(l, "background")) return ROLE_NORMAL;
   if (strstr(l, "leak"))  return ROLE_LEAK;
@@ -500,7 +465,7 @@ static Role roleOfLabel(const char* l) {
   return ROLE_UNCERTAIN;
 }
 
-// Safety-biased: leak sabse pehle check hota hai (leak miss karna false alarm se zyada bura hai)
+// Prioritize leak classification for safety margins
 static Role decideRole(float pLeak, float pNoise, float pNormal) {
   if (pLeak   >= LEAK_PROB_MIN)   return ROLE_LEAK;
   if (pNoise  >= NOISE_PROB_MIN)  return ROLE_NOISE;
@@ -508,7 +473,7 @@ static Role decideRole(float pLeak, float pNoise, float pNormal) {
   return ROLE_UNCERTAIN;
 }
 
-// Hysteresis: upar jane ke liye poora threshold, neeche aane ke liye 80%  (gas / heat / UV)
+// Hysteresis comparator: 100% trip threshold, 80% release threshold
 static GasLevel levelFrom(float v, float warn, float alarm, GasLevel prev) {
   const float h = 0.8f;
   if (v >= alarm || (prev == GAS_ALARM && v >= alarm * h)) return GAS_ALARM;
@@ -516,8 +481,8 @@ static GasLevel levelFrom(float v, float warn, float alarm, GasLevel prev) {
   return GAS_OK;
 }
 
-// Priority: gas alarm > heat alarm > UV alarm > leak > wet > gas warn > heat warn > UV warn
-//           > sensor fault > startup > ambient > noise > uncertain
+// Priority arbitration: Gas > Heat > UV > Acoustic Leak > Moisture > Warnings > System faults
+//           > Sensor faults > Initialization > Ambient noise > Uncertain
 static Verdict fuse(const FuseIn& in) {
   if (in.gasAlarm)  return {ALERT_DANGER,  CAUSE_GAS_ALARM};
   if (in.heatAlarm) return {ALERT_DANGER,  CAUSE_HEAT_ALARM};
@@ -535,7 +500,7 @@ static Verdict fuse(const FuseIn& in) {
   return {ALERT_OK, CAUSE_NONE};
 }
 
-static const char* causeText(Cause c) {      // OLED (<=10 chars, size 2)
+static const char* causeText(Cause c) {      // OLED banner string (10 characters max at size 2)
   switch (c) {
     case CAUSE_GAS_ALARM:  return "GAS LEAK!";
     case CAUSE_HEAT_ALARM: return "TOO HOT!";
@@ -573,18 +538,18 @@ static const char* causeName(Cause c) {
 }
 static const char* alertName(Alert a) { return a == ALERT_DANGER ? "DANGER" : (a == ALERT_CAUTION ? "CAUTION" : "OK"); }
 
-// 16 slots x 100 ms; bit set = buzzer ON
+// 1600ms cyclic cadence bitmask (100ms per slot)
 static uint16_t buzzPattern(Cause c) {
   switch (c) {
-    case CAUSE_GAS_ALARM:  return 0x5555;   // lagataar tez beep
-    case CAUSE_HEAT_ALARM: return 0x0F0F;   // 4 on / 4 off
-    case CAUSE_UV_ALARM:   return 0x1111;   // chhoti pulse har 400 ms
-    case CAUSE_LEAK:       return 0x0055;   // 4 beep, phir pause
-    case CAUSE_WET:        return 0x0015;   // 3 beep
-    case CAUSE_GAS_WARN:   return 0x0005;   // 2 beep
-    case CAUSE_HEAT_WARN:  return 0x0003;   // 1 lamba beep
-    case CAUSE_UV_WARN:    return 0x0001;   // 1 chhota beep
-    default:               return 0x0000;   // silent (LED/OLED se pata chalega)
+    case CAUSE_GAS_ALARM:  return 0x5555;   // Continuous rapid pulsing tone
+    case CAUSE_HEAT_ALARM: return 0x0F0F;   // 400ms on / 400ms off tone
+    case CAUSE_UV_ALARM:   return 0x1111;   // 100ms pulse every 400ms
+    case CAUSE_LEAK:       return 0x0055;   // Quad-pulse burst with cadence pause
+    case CAUSE_WET:        return 0x0015;   // Triple-pulse burst
+    case CAUSE_GAS_WARN:   return 0x0005;   // Double-pulse warning tone
+    case CAUSE_HEAT_WARN:  return 0x0003;   // Single elongated warning tone
+    case CAUSE_UV_WARN:    return 0x0001;   // Short periodic warning pulse
+    default:               return 0x0000;   // Silent mode: visual feedback only
   }
 }
 
@@ -601,7 +566,7 @@ static void runModel(float* x, AcousticResult& r) {
   for (size_t i = 0; i < EI_CLASSIFIER_LABEL_COUNT; i++) {
     const char* lbl = res.classification[i].label;
     const float v = res.classification[i].value;
-    switch (roleOfLabel(lbl)) {                    // multiple leak classes (small/large) ki probability jud jati hai
+    switch (roleOfLabel(lbl)) {                    // Accumulate compound class probabilities (e.g. small/large leak)
       case ROLE_LEAK:   r.pLeak   += v; break;
       case ROLE_NOISE:  r.pNoise  += v; break;
       case ROLE_NORMAL: r.pNormal += v; break;
@@ -625,10 +590,10 @@ static void runModel(float* x, AcousticResult& r) {
 #endif
 }
 
-// Naya window aaya: copy -> RMS -> model -> result queue
+// Process incoming audio window and feed model tensor
 static void inferenceStep() {
   const uint32_t head = gHead.load(std::memory_order_acquire);
-  if (head < gWin) return;                         // window abhi poori nahi bhari
+  if (head < gWin) return;                         // Wait until circular buffer accumulates a full window
   const uint32_t start = head - gWin;
   for (uint32_t i = 0; i < gWin; i++) gFeat[i] = (float)gRing[(start + i) & gRingMask];
 
@@ -646,22 +611,22 @@ static void inferenceStep() {
 
 static void inferenceTask(void*) {
   for (;;) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);       // hop poora hone par sampler jagata hai
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);       // Triggered by sampler upon hop completion
     inferenceStep();
   }
 }
 
 // ---------- gas helpers (Rs/R0, optional ppm) ----------
-static float mqRs(float counts) {                  // approx: ADC counts -> kOhm (ESP32 ADC nonlinear, isliye relative use karo)
+static float mqRs(float counts) {                  // Approximate sensor resistance from ADC counts (kOhm)
   const float v = counts / 4095.0f * 3.3f * GAS_DIV_FACTOR;
   if (v < 0.05f || v >= GAS_VCC) return 0.0f;
   return GAS_RL_KOHM * (GAS_VCC - v) / v;
 }
-static float gasRatio() {                          // Rs/R0: ~1.0 saaf hawa, gas me ghatta hai. 0 = unknown
+static float gasRatio() {                          // Normalized sensor resistance ratio Rs/R0
   const float r0 = mqRs(app.gas.base), rs = mqRs(app.gas.f.ema);
   return (r0 > 0.0f && rs > 0.0f) ? rs / r0 : 0.0f;
 }
-static float gasPpm() {                            // -1 = calibration nahi hui
+static float gasPpm() {                            // Uncalibrated fallback code
 #if GAS_CAL_VALID
   const float r = gasRatio();
   return r > 0.0f ? GAS_PPM_A * powf(r, GAS_PPM_B) : 0.0f;
@@ -675,7 +640,7 @@ static int uvDelta()  { return (int)(app.uv.f.ema - app.uv.base); }
 // ---------- logging (HTTP(S) POST to backend, background task) ----------
 static uint32_t nowEpoch() {
   const time_t t = time(nullptr);
-  return t > 1700000000 ? (uint32_t)t : 0;         // 0 = abhi NTP sync nahi hua (backend server time use karega)
+  return t > 1700000000 ? (uint32_t)t : 0;         // Epoch timestamp (0 indicates pending NTP synchronization)
 }
 static uint32_t newSessionId() { const uint32_t e = nowEpoch(); return e ? e : esp_random(); }
 
@@ -684,7 +649,7 @@ static void enqueueLog(const LogItem& it) {
   Serial.printf("[log] %s %s\n", it.trainee, it.json);
 #endif
   if (!gLogQ) return;
-  if (xQueueSend(gLogQ, &it, 0) != pdTRUE) {       // queue full: sabse purana hata do
+  if (xQueueSend(gLogQ, &it, 0) != pdTRUE) {       // Ring queue: drop oldest telemetry frame when saturated
     LogItem dropped;
     xQueueReceive(gLogQ, &dropped, 0);
     xQueueSend(gLogQ, &it, 0);
@@ -723,13 +688,13 @@ static void logSummary(uint32_t now) {
 }
 
 #if ENABLE_WIFI_LOGGING
-static WiFiClient gPlain;                          // http:// ke liye
+static WiFiClient gPlain;                          // Non-TLS HTTP client transport
 
 static bool sendItem(WiFiClientSecure& secure, LogItem& it) {
   char url[240];
   const int n = snprintf(url, sizeof(url), "%s/api/log?trainee=%s&session=%lu&kind=%s", BACKEND_URL,
                          it.trainee, (unsigned long)it.session, it.kind == LOGK_SUMMARY ? "summary" : "event");
-  if (n <= 0 || n >= (int)sizeof(url)) return true;            // URL kharab hai: retry bekaar, drop
+  if (n <= 0 || n >= (int)sizeof(url)) return true;            // Invalid request target URL: discard frame
   const bool https = strncmp(url, "https", 5) == 0;
   WiFiClient& cl = https ? static_cast<WiFiClient&>(secure) : gPlain;
   HTTPClient http;
@@ -740,7 +705,7 @@ static bool sendItem(WiFiClientSecure& secure, LogItem& it) {
   http.addHeader("X-Device-Key", DEVICE_KEY);
   const int code = http.POST((uint8_t*)it.json, strlen(it.json));
   http.end();
-  return code == 200;                                          // backend duplicate ignore karta hai, retry safe hai
+  return code == 200;                                          // Server deduplicates idempotently: safe to retry
 }
 
 static void uploaderTask(void*) {
@@ -748,7 +713,7 @@ static void uploaderTask(void*) {
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   WiFiClientSecure secure;
-  secure.setInsecure();              // prototype: certificate check off. Production me root CA lagao.
+  secure.setInsecure();              // Insecure TLS context for local bench testing
   bool ntpStarted = false;
   uint32_t lastKick = millis();
   for (;;) {
@@ -764,7 +729,7 @@ static void uploaderTask(void*) {
     if (xQueueReceive(gLogQ, &it, pdMS_TO_TICKS(500)) != pdTRUE) continue;
     if (!sendItem(secure, it)) {
       secure.stop(); gPlain.stop();
-      xQueueSendToFront(gLogQ, &it, 0);            // dobara try; queue full ho to drop (theek hai)
+      xQueueSendToFront(gLogQ, &it, 0);            // Push back to queue head for subsequent retry
       vTaskDelay(pdMS_TO_TICKS(3000));
     }
   }
@@ -787,11 +752,11 @@ static void setBuzzer(bool on) {
 #endif
 }
 
-// Localisation / proximity cue (Geiger counter style): intensity jitni zyada, beep utni tez.
-//  - Leak: contact RMS / baseline ratio  (handheld ko pipe pe ghumao, jahan beep sabse tez wahi leak point)
-//  - Welding: IR temperature aur UV baseline se kitna upar (jitna paas/zyada exposure, utni tez beep)
+// Proximity audio localization feedback (pulse frequency increases with proximity)
+// Acoustic signal strength ratio relative to calibrated baseline
+// Thermal and optical exposure level tracking
 static void cueBeep(uint32_t now) {
-  if (app.alert == ALERT_DANGER || app.cause == CAUSE_AMBIENT) return;   // danger ka apna pattern hai
+  if (app.alert == ALERT_DANGER || app.cause == CAUSE_AMBIENT) return;   // Active danger alarms override localization audio
   float k = 0.0f;
   const float base = gRmsBase.load();
   if (base > 0.0f && app.rmsCal && app.role != ROLE_NOISE) {
@@ -829,7 +794,7 @@ static void refreshDisplay(uint32_t now) {
   gOled.clearDisplay();
   gOled.setTextColor(SSD1306_WHITE);
 
-  // header: trainee + session timer + wifi
+  // Header: Trainee ID, elapsed session time, and network status
   gOled.setTextSize(1);
   gOled.setCursor(0, 0);
   if (app.sess.active) {
@@ -842,7 +807,7 @@ static void refreshDisplay(uint32_t now) {
   gOled.setCursor(104, 0);
   gOled.print(gWifiUp ? "WiFi" : "----");
 
-  // main status (center)
+  // Primary status readouts
   gOled.setTextSize(2);
   const char* t = causeText(app.cause);
   int16_t x1, y1; uint16_t w, h;
@@ -850,7 +815,7 @@ static void refreshDisplay(uint32_t now) {
   gOled.setCursor((128 - (int)w) / 2, 13);
   gOled.print(t);
 
-  // confidence bar
+  // Normalized confidence progress indicator
   float conf = app.pNormal;
   if (app.cause == CAUSE_LEAK) conf = app.pLeak;
   else if (app.cause == CAUSE_NOISE) conf = app.pNoise;
@@ -858,7 +823,7 @@ static void refreshDisplay(uint32_t now) {
   gOled.drawRect(0, 34, 128, 8, SSD1306_WHITE);
   gOled.fillRect(2, 36, (int)(clampf(conf, 0, 1) * 124), 4, SSD1306_WHITE);
 
-  // info lines
+  // Secondary telemetry readouts
   gOled.setTextSize(1);
   gOled.setCursor(0, 46);
 #if HAS_GAS_SENSOR
@@ -887,22 +852,22 @@ static void refreshDisplay(uint32_t now) {
 #endif
   gOled.print(b);
 
-  const bool inv = (app.alert == ALERT_DANGER) && ((now / 500) & 1);   // danger me screen blink
+  const bool inv = (app.alert == ALERT_DANGER) && ((now / 500) & 1);   // Invert display during critical danger alerts
   if (inv != app.oledInv) { gOled.invertDisplay(inv); app.oledInv = inv; }
   gOled.display();
 }
 
-// ---------- MLX90614 (raw SMBus read, library ki zarurat nahi) ----------
+// ---------- MLX90614 Direct I2C SMBus Driver ----------
 #if HAS_HEAT_SENSOR
 static bool mlxReadObjectC(float& c) {
   Wire.beginTransmission(MLX_ADDR);
-  Wire.write(0x07);                                  // TOBJ1
+  Wire.write(0x07);                                  // Target object temperature register
   if (Wire.endTransmission(false) != 0) return false;
   if (Wire.requestFrom((uint8_t)MLX_ADDR, (uint8_t)3) != 3) return false;
   const uint8_t lo = Wire.read(), hi = Wire.read();
-  (void)Wire.read();                                 // PEC (check nahi kar rahe)
+  (void)Wire.read();                                 // Discard packet error code
   const uint16_t raw = (uint16_t)lo | ((uint16_t)hi << 8);
-  if (raw & 0x8000) return false;                    // sensor error flag
+  if (raw & 0x8000) return false;                    // Sensor internal error flag bit
   c = raw * 0.02f - 273.15f;
   return true;
 }
@@ -927,16 +892,16 @@ static void pollHeat(uint32_t now) {
 // ---------- application logic ----------
 static void gasFeed(GasState& g, uint16_t raw, uint32_t now) {
   g.f.feed(raw, 0.2f);
-  const bool railed = raw < 20;                    // sensor ground se chipka / disconnected
+  const bool railed = raw < 20;                    // Detect sensor ground rail or open circuit condition
   g.fault.update(railed);
-  if (g.wasFault && !g.fault.state) {              // sensor wapas aaya -> naya baseline lo
+  if (g.wasFault && !g.fault.state) {              // Recovered from fault; schedule baseline recalibration
     app.calGasPending = true; app.calGasAt = now + 3000; g.cal = false; g.level = GAS_OK;
   }
   g.wasFault = g.fault.state;
   if (!g.cal || g.fault.state || railed) return;
   const float delta = g.f.ema - g.base;
-  if (g.f.ema < g.base) g.base = g.f.ema;                              // neeche follow karo (settling / saaf hawa)
-  else if (delta < GAS_WARN_DELTA * 0.5f) g.base += 0.0005f * delta;   // dheere upar drift
+  if (g.f.ema < g.base) g.base = g.f.ema;                              // Follow baseline downward drift (clean air settling)
+  else if (delta < GAS_WARN_DELTA * 0.5f) g.base += 0.0005f * delta;   // Slow upward baseline compensation filter
 #if GAS_CAL_VALID
   g.level = levelFrom(gasPpm() / GAS_LEL_PPM * 100.0f, GAS_WARN_LEL_PCT, GAS_ALARM_LEL_PCT, g.level);
 #else
@@ -955,7 +920,7 @@ static void uvFeed(UvState& u, uint16_t raw) {
   if (!u.cal) return;
   const float delta = u.f.ema - u.base;
   if (u.f.ema < u.base) u.base = u.f.ema;
-  else if (delta < UV_WARN_DELTA * 0.5f) u.base += 0.0005f * delta;    // dheere badalti dhoop jaisa drift
+  else if (delta < UV_WARN_DELTA * 0.5f) u.base += 0.0005f * delta;    // Ambient optical baseline drift compensation
   u.level = levelFrom(u.f.ema - u.base, UV_WARN_DELTA, UV_ALARM_DELTA, u.level);
 }
 
@@ -1006,7 +971,7 @@ static void requestCalibration(uint32_t now) {
 static void pollAcoustic(uint32_t now) {
   AcousticResult r;
   if (xQueueReceive(gResultQ, &r, 0) != pdTRUE) {
-    app.stale = app.haveResult && (now - app.lastResultMs > STALE_MS);   // result aana band = sampler/model atka
+    app.stale = app.haveResult && (now - app.lastResultMs > STALE_MS);   // Watchdog timeout for inference pipeline staleness
     return;
   }
   app.haveResult = true; app.stale = false; app.lastResultMs = now; app.resultCount++;
@@ -1015,7 +980,7 @@ static void pollAcoustic(uint32_t now) {
   if (!app.rmsPrimed) { app.rmsEma = r.rms; app.rmsPrimed = true; } else app.rmsEma += 0.3f * (r.rms - app.rmsEma);
 
   Role role = decideRole(r.pLeak, r.pNoise, r.pNormal);
-  if (r.anomalous && role == ROLE_NORMAL) role = ROLE_UNCERTAIN;      // anomaly sirf "normal" ko downgrade karta hai, leak ko nahi
+  if (r.anomalous && role == ROLE_NORMAL) role = ROLE_UNCERTAIN;      // Anomaly score downgrades normal classification to uncertain
 
   const bool noSig = r.rms < MIN_SIGNAL_RMS;
   app.noSignal.update(noSig);
@@ -1024,7 +989,7 @@ static void pollAcoustic(uint32_t now) {
   app.ambient = false;
 #if USE_REFERENCE_SENSOR
   if (role == ROLE_LEAK && r.refRms > REF_NOISE_RMS && (r.rms / r.refRms) < REF_MIN_RATIO) {
-    app.ambient = true; role = ROLE_UNCERTAIN;                         // bahar ka shor: leak mat bolo
+    app.ambient = true; role = ROLE_UNCERTAIN;                         // Reference microphone ambient noise cancellation
   }
 #endif
   app.role = role;
@@ -1106,7 +1071,7 @@ static void handleButton(uint32_t now) {
   else if (pressed && down && !longDone && now - t0 >= LONG_PRESS_MS) { longDone = true; requestCalibration(now); }
   else if (!pressed && down) {
     down = false;
-    if (!longDone && now - t0 >= 40) { if (app.sess.active) stopSession(now); else startSession(now); }   // 40 ms = debounce
+    if (!longDone && now - t0 >= 40) { if (app.sess.active) stopSession(now); else startSession(now); }   // 40ms mechanical contact debounce filter
   }
 }
 
@@ -1125,7 +1090,7 @@ static void handleSerial(uint32_t now) {
           size_t k = 0;
           char tmp[sizeof(gTrainee)];
           for (const char* p = buf + 3; *p && k < sizeof(tmp) - 1; p++)
-            if (isalnum((unsigned char)*p) || *p == '_' || *p == '-') tmp[k++] = *p;   // URL-safe characters hi
+            if (isalnum((unsigned char)*p) || *p == '_' || *p == '-') tmp[k++] = *p;   // Sanitize identifier to URL-safe character set
           tmp[k] = 0;
           if (k > 0) { memcpy(gTrainee, tmp, k + 1); flashMessage("ID SET", now); }
         }
@@ -1174,18 +1139,18 @@ void setup() {
   pinMode(PIN_BUZZER, OUTPUT);
 #endif
 
-  app = App();                                     // fresh state
+  app = App();                                     // Initialize runtime state machine
   gHead.store(0); gSlowSeq.store(0); gOverruns.store(0); gRmsBase.store(0.0f);
 
   setupAdc();
   computeSamplingParams();
-  if (!allocateRings()) fatal("[fatal] ring buffer allocate nahi hua (RAM kam)");
+  if (!allocateRings()) fatal("[fatal] Ring buffer allocation failed (insufficient SRAM)");
   gFeat = (float*)allocBig(sizeof(float) * gWin);
-  if (!gFeat) fatal("[fatal] feature buffer allocate nahi hua (PSRAM enable karo / window chhoti karo)");
+  if (!gFeat) fatal("[fatal] Feature buffer allocation failed (enable PSRAM or reduce window size)");
 
   Wire.begin(PIN_SDA, PIN_SCL);
-  Wire.setClock(100000);                           // MLX90614 max 100 kHz; SSD1306 library display() ke time khud 400 kHz karti hai
-  gOledOk = gOled.begin(SSD1306_SWITCHCAPVCC, 0x3C, true, false);   // OLED na mile to bhi chalta rahega
+  Wire.setClock(100000);                           // Configure I2C bus clock to 100kHz for sensor compatibility
+  gOledOk = gOled.begin(SSD1306_SWITCHCAPVCC, 0x3C, true, false);   // Initialize OLED display (continue gracefully if absent)
   if (gOledOk) {
     gOled.clearDisplay(); gOled.setTextColor(SSD1306_WHITE);
     gOled.setTextSize(2); gOled.setCursor(8, 8);  gOled.print("LEAK SENSE");
@@ -1205,8 +1170,8 @@ void setup() {
                 (unsigned long)gWin, (unsigned long)gHop, USE_EDGE_IMPULSE ? "EdgeImpulse" : "RMS-fallback",
                 USE_REFERENCE_SENSOR, HAS_HEAT_SENSOR, HAS_UV_SENSOR);
 #endif
-  delay(1200);                                     // splash
-  startSampling();                                 // sab tayyar: sampling shuru
+  delay(1200);                                     // Boot splash delay
+  startSampling();                                 // Initialize hardware timer and sampling engine
 }
 
 void loop() {
