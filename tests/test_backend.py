@@ -564,5 +564,35 @@ class TestAuditAndDiagnostics:
         assert "secret" not in str(data).lower()
 
 
+class TestZeroMockPolicy:
+    """Verifies that no fallback/mock objects are returned when querying non-existent records."""
+
+    def test_unknown_device_returns_404_never_mock(self, client, auth_headers):
+        """Requesting non-existent device returns 404, never a fabricated device."""
+        response = client.get("/api/v1/devices/NON-EXISTENT-DEVICE-999", headers=auth_headers)
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_unknown_session_returns_404_never_mock(self, client, auth_headers):
+        """Requesting non-existent session returns 404, never a fabricated session."""
+        response = client.get("/api/v1/sessions/999999", headers=auth_headers)
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_unknown_assessment_returns_404_never_mock(self, client, auth_headers):
+        """Requesting non-existent assessment returns 404, never a fabricated assessment."""
+        response = client.get("/api/v1/assessments/NON-EXISTENT-EVAL-999", headers=auth_headers)
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_empty_event_query_returns_empty_list_never_synthetic(self, client, auth_headers):
+        """Querying events for a non-existent device returns empty list, never synthetic records."""
+        response = client.get("/api/v1/events?device_id=NON-EXISTENT-DEVICE-999", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
+        assert data["items"] == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/motion_tokens.dart';
@@ -128,6 +129,8 @@ class AssessmentListScreen extends ConsumerWidget {
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: TactilePressable(
+                      onTap: () =>
+                          context.push('/assessments/${assessment.assessmentId}'),
                       child: _buildAssessmentCard(context, assessment, isDark),
                     ),
                   ),

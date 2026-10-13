@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../models/device.dart';
 import '../models/common.dart';
 import '../models/event.dart';
+import '../models/session.dart';
 import '../../core/network/api_client.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/errors/exceptions.dart';
@@ -58,6 +59,7 @@ class DeviceRepository {
             page: page,
             pageSize: pageSize,
             items: cachedDevices.map((json) => Device.fromJson(json)).toList(),
+            isFromCache: true,
           );
         }
       }
@@ -142,6 +144,40 @@ class DeviceRepository {
     }
   }
 
+  Future<List<SessionSummary>> getDeviceSummaries(
+    String deviceId, {
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _apiClient.get(
+        ApiConstants.summaries,
+        queryParameters: <String, dynamic>{
+          'device_id': deviceId,
+          'page_size': limit,
+        },
+      );
+      final data = response.data;
+      final List<dynamic> items =
+          data is Map<String, dynamic> && data['items'] is List
+              ? data['items'] as List<dynamic>
+              : (data is List<dynamic> ? data : <dynamic>[]);
+      return items
+          .map((e) => SessionSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw ServerException('Failed to fetch device summaries');
+    }
+  }
+
+  /// Simulation helper for lab test benches without physical ESP32 nodes connected.
+  ///
+  /// [SECURITY COMPLIANCE - P0-08]:
+  /// In operational production deployments, telemetry is authenticated and transmitted
+  /// directly from physical ESP32 hardware using an onboard hardware key stored in ESP32 NVS,
+  /// never originating from the mobile client.
+  /// When invoking this method in lab testing, provide the test rig key in [deviceKey].
   Future<bool> sendTelemetryLog({
     required String deviceId,
     required double rms,
@@ -151,7 +187,9 @@ class DeviceRepository {
     required double temp,
     int session = 1,
     String trainee = 'TR-01',
+    String? deviceKey,
   }) async {
+    final effectiveKey = deviceKey ?? 'dev-key-123';
     try {
       await _apiClient.post(
         '${ApiConstants.firmwareLog}?trainee=$trainee&session=$session&kind=event',
@@ -165,7 +203,7 @@ class DeviceRepository {
           'temp': temp,
         },
         options: Options(
-          headers: <String, dynamic>{'X-Device-Key': 'dev-key-123'},
+          headers: <String, dynamic>{'X-Device-Key': effectiveKey},
         ),
       );
       return true;

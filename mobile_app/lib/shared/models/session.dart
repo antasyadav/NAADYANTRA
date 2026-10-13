@@ -112,7 +112,7 @@ class SessionSummary {
       heatEvents: json['heat_events'] as int?,
       uvEvents: json['uv_events'] as int?,
       noiseWindows: json['noise_windows'] as int?,
-      maxLeakProbability: json['max_leak_probability'] as double?,
+      maxLeakProbability: (json['max_leak_probability'] as num?)?.toDouble(),
       firmwareVersion: json['firmware_version'] as String?,
       rawPayload: json['raw_payload'] as Map<String, dynamic>? ?? {},
       serverTimestamp: DateTime.parse(json['server_timestamp'] as String),

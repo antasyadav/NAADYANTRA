@@ -11,6 +11,8 @@ import '../features/sessions/screens/session_detail_screen.dart';
 import '../features/settings/screens/settings_screen.dart';
 
 import '../features/assessments/screens/assessment_list_screen.dart';
+import '../features/assessments/screens/assessment_detail_screen.dart';
+import '../features/help/screens/help_screen.dart';
 import '../shared/widgets/state_views.dart';
 
 // Router Provider
@@ -69,6 +71,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/assessments',
         name: 'assessments',
         builder: (context, state) => const AssessmentListScreen(),
+      ),
+      GoRoute(
+        path: '/assessments/:assessmentId',
+        name: 'assessment-detail',
+        builder: (context, state) {
+          final assessmentId = state.pathParameters['assessmentId']!;
+          return AssessmentDetailScreen(assessmentId: assessmentId);
+        },
+      ),
+      GoRoute(
+        path: '/help',
+        name: 'help',
+        builder: (context, state) => const HelpScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

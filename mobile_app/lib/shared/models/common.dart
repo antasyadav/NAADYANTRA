@@ -3,12 +3,14 @@ class PaginatedResponse<T> {
   final int page;
   final int pageSize;
   final List<T> items;
+  final bool isFromCache;
 
   PaginatedResponse({
     required this.total,
     required this.page,
     required this.pageSize,
     required this.items,
+    this.isFromCache = false,
   });
 
   factory PaginatedResponse.fromJson(

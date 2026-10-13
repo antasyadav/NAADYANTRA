@@ -70,16 +70,20 @@ class Event {
       alert: json['alert'] as String?,
       cause: json['cause'] as String?,
       modelLabel: json['model_label'] as String?,
-      leakProbability: json['leak_probability'] as double?,
-      rms: json['rms'] as double?,
+      leakProbability: (json['leak_probability'] as num?)?.toDouble(),
+      rms: (json['rms'] as num?)?.toDouble(),
       gasDelta: json['gas_delta'] as int?,
-      gasRatio: json['gas_ratio'] as double?,
-      temperature: json['temperature'] as double?,
+      gasRatio: (json['gas_ratio'] as num?)?.toDouble(),
+      temperature: (json['temperature'] as num?)?.toDouble(),
       uvDelta: json['uv_delta'] as int?,
-      wet: json['wet'] as bool?,
+      wet: json['wet'] == null
+          ? null
+          : (json['wet'] is bool
+              ? json['wet'] as bool
+              : (json['wet'] as num) != 0),
       firmwareVersion: json['firmware_version'] as String?,
       rawPayload: json['raw_payload'] as Map<String, dynamic>? ?? {},
-      ingestionStatus: json['ingestion_status'] as String,
+      ingestionStatus: json['ingestion_status'] as String? ?? 'accepted',
     );
   }
 

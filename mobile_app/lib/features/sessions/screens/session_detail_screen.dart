@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +18,6 @@ import '../../../shared/widgets/metric_readout.dart';
 import '../../../shared/widgets/state_views.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
-import '../../../shared/backgrounds/ambient_depth_canvas.dart';
 import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final sessionDetailsProvider =
@@ -503,63 +501,98 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
     bool isDark,
   ) {
     final maxLeak = summary.maxLeakProbability ?? 0.0;
-    final hasLeak = (summary.leakEvents ?? 0) > 0 || maxLeak > 0.4;
+    final hasLeak = (summary.leakEvents ?? 0) > 0 || maxLeak >= 0.65;
+    final leakPct = (maxLeak * 100).toStringAsFixed(1);
 
-    return AmbientDepthCanvas(
-      showReticles: true,
-      child: IndustrialCard(
-        title: 'Acoustic Frequency Bins (0 - 48 kHz)',
-        subtitle: 'Synthesized Spectral Response Profile',
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: hasLeak
-                ? AppColors.alertDanger.withValues(alpha: 0.1)
-                : AppColors.alertOk.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            hasLeak ? 'ANOMALY DETECTED' : 'NOMINAL PROFILE',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: hasLeak ? AppColors.alertDanger : AppColors.alertOk,
-            ),
+    return IndustrialCard(
+      title: 'Acoustic Diagnostic Profile',
+      subtitle: 'On-Node Inference & Contact-Piezo Analysis',
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: hasLeak
+              ? AppColors.alertDanger.withValues(alpha: 0.1)
+              : AppColors.alertOk.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          hasLeak ? 'LEAK SIGNATURE ASSERTED' : 'NOMINAL BASELINE',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            color: hasLeak ? AppColors.alertDanger : AppColors.alertOk,
           ),
         ),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 72,
-              child: CustomPaint(
-                painter: _SpectrumPainter(
-                  hasLeak: hasLeak,
-                  isDark: isDark,
-                  intensity: maxLeak,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: MetricReadout(
+                  label: 'Peak Leak Probability',
+                  value: '$leakPct%',
+                  icon: Icons.psychology_alt_rounded,
+                  accentColor: hasLeak ? AppColors.alertDanger : AppColors.alertOk,
                 ),
-                size: const Size(double.infinity, 72),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: MetricReadout(
+                  label: 'Acoustic Windows',
+                  value: '${summary.windows ?? 0}',
+                  unit: 'frames',
+                  icon: Icons.grain_rounded,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? AppColors.darkSurfaceElevated
+                  : AppColors.industrialIvory,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : AppColors.warmStone,
               ),
             ),
-            const SizedBox(height: 8),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Row(
               children: [
-                Text(
-                  '0 kHz (DC)',
-                  style: TextStyle(fontSize: 10, color: AppColors.warmGraphite),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: AppColors.warmGraphite,
                 ),
-                Text(
-                  '24 kHz (Nyquist Band)',
-                  style: TextStyle(fontSize: 10, color: AppColors.warmGraphite),
-                ),
-                Text(
-                  '48 kHz (Ultrasonic Peak)',
-                  style: TextStyle(fontSize: 10, color: AppColors.warmGraphite),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hasLeak
+                        ? 'Edge Impulse TinyML model asserted leak threshold (≥0.65) during this run with $leakPct% confidence.'
+                        : 'Acoustic contacts remained within nominal baseline. Ambient noise filtered: ${summary.noiseWindows ?? 0} windows.',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.warmGraphite,
+                      height: 1.35,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Hardware Rig Ground Truth: ESP32 contact-piezo samples at 4000 Hz target with 1024-sample windows (50% hop). Discrete 48 kHz FFT streaming is not transmitted on this single-channel rig.',
+            style: TextStyle(
+              fontSize: 10,
+              color: AppColors.warmGraphite,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -798,64 +831,3 @@ class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
   }
 }
 
-class _SpectrumPainter extends CustomPainter {
-  final bool hasLeak;
-  final bool isDark;
-  final double intensity;
-
-  _SpectrumPainter({
-    required this.hasLeak,
-    required this.isDark,
-    required this.intensity,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const bars = 24;
-    final barWidth = (size.width - (bars - 1) * 3) / bars;
-
-    for (int i = 0; i < bars; i++) {
-      final norm = i / (bars - 1);
-      double heightRatio;
-
-      if (hasLeak) {
-        // High harmonic energy in 18-35 kHz leak resonance band
-        final peak = math.exp(-math.pow((norm - 0.65) * 4, 2));
-        heightRatio = (0.2 + peak * 0.75 * (0.6 + intensity * 0.4)).clamp(
-          0.1,
-          0.95,
-        );
-      } else {
-        // Low baseline 1/f noise spectrum
-        heightRatio = (0.5 * math.exp(-norm * 2.5) + 0.1).clamp(0.08, 0.85);
-      }
-
-      final barH = size.height * heightRatio;
-      final x = i * (barWidth + 3);
-      final y = size.height - barH;
-
-      final barColor = hasLeak && norm > 0.5 && norm < 0.8
-          ? AppColors.alertDanger
-          : (isDark ? AppColors.burntOrange : AppColors.darkBurntOrange);
-
-      final paint = Paint()
-        ..color = barColor.withValues(alpha: 0.8)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, y, barWidth, barH),
-          const Radius.circular(2),
-        ),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SpectrumPainter oldDelegate) {
-    return oldDelegate.hasLeak != hasLeak ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.intensity != intensity;
-  }
-}

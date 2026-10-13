@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/dashboard.dart';
 import '../../../shared/services/providers.dart';
 import '../../../shared/widgets/industrial_card.dart';
 import '../../../shared/widgets/status_pill.dart';
@@ -14,6 +16,26 @@ import '../../../shared/backgrounds/animated_screen_background.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../../inspection/screens/inspection_screen.dart';
 import '../../sessions/screens/session_list_screen.dart';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Providers — real data from backend dashboard APIs
+// ──────────────────────────────────────────────────────────────────────────────
+
+final dashboardOverviewProvider =
+    FutureProvider.autoDispose<DashboardOverview>((ref) async {
+      final repo = ref.watch(dashboardRepositoryProvider);
+      return repo.getOverview();
+    });
+
+final dashboardRecentActivityProvider =
+    FutureProvider.autoDispose<List<RecentActivityItem>>((ref) async {
+      final repo = ref.watch(dashboardRepositoryProvider);
+      return repo.getRecentActivity(pageSize: 5);
+    });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// HomeScreen — 4-tab shell
+// ──────────────────────────────────────────────────────────────────────────────
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -72,7 +94,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-// Home Tab (Overview)
+// ──────────────────────────────────────────────────────────────────────────────
+// Home Tab (Overview) — uses REAL dashboard API data
+// ──────────────────────────────────────────────────────────────────────────────
+
 class _HomeTab extends ConsumerWidget {
   final ValueChanged<int> onSwitchTab;
 
@@ -85,6 +110,11 @@ class _HomeTab extends ConsumerWidget {
     final isDark = theme.brightness == Brightness.dark;
     final selectedDeviceId =
         ref.watch(selectedDeviceIdProvider) ?? 'SIH-DEV-01';
+
+    // Real data from backend
+    final overviewAsync = ref.watch(dashboardOverviewProvider);
+    final activityAsync = ref.watch(dashboardRecentActivityProvider);
+    final deviceStatusAsync = ref.watch(deviceStatusProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -134,6 +164,15 @@ class _HomeTab extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            tooltip: 'Refresh Overview',
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            onPressed: () {
+              ref.invalidate(dashboardOverviewProvider);
+              ref.invalidate(dashboardRecentActivityProvider);
+              ref.invalidate(deviceStatusProvider);
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.logout_rounded, size: 20),
             tooltip: 'Sign Out',
             onPressed: () async {
@@ -146,10 +185,16 @@ class _HomeTab extends ConsumerWidget {
       body: AnimatedScreenBackground(
         theme: ScreenBackgroundTheme.overview,
         intensity: 0.85,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          children: [
-              // Greeting Banner Card
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(dashboardOverviewProvider);
+            ref.invalidate(dashboardRecentActivityProvider);
+            ref.invalidate(deviceStatusProvider);
+          },
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            children: [
+              // ── Greeting Banner Card ──
               StaggeredEntrance(
                 index: 0,
                 child: IndustrialCard(
@@ -197,7 +242,7 @@ class _HomeTab extends ConsumerWidget {
                                   ),
                                 ),
                                 const StatusPill(
-                                  label: 'CERTIFIED',
+                                  label: 'AUTHENTICATED',
                                   type: StatusType.completed,
                                 ),
                               ],
@@ -215,115 +260,168 @@ class _HomeTab extends ConsumerWidget {
                 ),
               ),
 
-              // Primary Device Status Monitor Card
+              const SizedBox(height: 12),
+
+              // ── Primary Device Status Card (REAL data from deviceStatusProvider) ──
               StaggeredEntrance(
                 index: 1,
-                child: IndustrialCard(
-                  title: 'Active Hardware Node',
-                  subtitle: 'Target Diagnostic Telemetry Probe',
-                  trailing: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PulsingBeacon(size: 9, color: AppColors.alertOk),
-                      SizedBox(width: 6),
-                      StatusPill(
-                        label: 'ONLINE',
-                        type: StatusType.online,
-                        showDot: false,
-                      ),
-                    ],
-                  ),
-                  onTap: () => context.go('/devices/$selectedDeviceId'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppColors.darkSurfaceElevated
-                                  : AppColors.lightBurntOrange,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.memory_rounded,
-                              color: AppColors.burntOrange,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  selectedDeviceId,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    fontFeatures: [
-                                      FontFeature.tabularFigures(),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'ESP32-S3 Acoustic Rig • 48 kHz Sampling',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.warmGraphite,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: AppColors.warmGraphite,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                child: deviceStatusAsync.when(
+                  data: (status) => IndustrialCard(
+                    title: 'Active Hardware Node',
+                    subtitle: 'Target Diagnostic Telemetry Probe',
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PulsingBeacon(
+                          size: 9,
+                          color: status.isOnline
+                              ? AppColors.alertOk
+                              : AppColors.warmGraphite,
                         ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkSurfaceElevated
-                              : AppColors.industrialIvory,
-                          borderRadius: BorderRadius.circular(8),
+                        const SizedBox(width: 6),
+                        StatusPill(
+                          label: status.isOnline ? 'ONLINE' : 'OFFLINE',
+                          type: status.isOnline
+                              ? StatusType.online
+                              : StatusType.offline,
+                          showDot: false,
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      ],
+                    ),
+                    onTap: () => context.go('/devices/$selectedDeviceId'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              'Signal Quality: Nominal',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.darkSurfaceElevated
+                                    : AppColors.lightBurntOrange,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.memory_rounded,
+                                color: AppColors.burntOrange,
+                                size: 24,
                               ),
                             ),
-                            Text(
-                              'Tap to inspect node →',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.burntOrange,
-                                fontWeight: FontWeight.w600,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    selectedDeviceId,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    status.firmwareVersion != null
+                                        ? 'FW ${status.firmwareVersion} · ESP32-S3 Acoustic Rig'
+                                        : 'ESP32-S3 Acoustic Rig',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.warmGraphite,
+                                    ),
+                                  ),
+                                ],
                               ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.warmGraphite,
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.darkSurfaceElevated
+                                : AppColors.industrialIvory,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                status.isOnline
+                                    ? 'Recent Activity: ${status.recentActivityCount} events'
+                                    : status.lastSeenAt != null
+                                        ? 'Last seen: ${_formatRelativeTime(status.lastSeenAt!)}'
+                                        : 'Status: Never connected',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const Text(
+                                'Tap to inspect node →',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.burntOrange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  loading: () => IndustrialCard(
+                    title: 'Active Hardware Node',
+                    subtitle: 'Loading status...',
+                    child: const SizedBox(
+                      height: 48,
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                    ],
+                    ),
+                  ),
+                  error: (err, _) => IndustrialCard(
+                    title: 'Active Hardware Node',
+                    subtitle: selectedDeviceId,
+                    onTap: () => context.go('/devices/$selectedDeviceId'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkSurfaceElevated
+                            : AppColors.industrialIvory,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Status unavailable — tap to view details',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.warmGraphite,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
 
-              // Telemetry Statistics (3-Column Layout)
+              const SizedBox(height: 12),
+
+              // ── Telemetry Statistics (REAL data from dashboard overview API) ──
               StaggeredEntrance(
                 index: 2,
                 child: Column(
@@ -343,46 +441,88 @@ class _HomeTab extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: MetricReadout(
-                            label: 'Sessions',
-                            value: '12',
-                            unit: 'runs',
-                            icon: Icons.assignment_outlined,
-                            onTap: () => onSwitchTab(2),
+                    overviewAsync.when(
+                      data: (overview) => Row(
+                        children: [
+                          Expanded(
+                            child: MetricReadout(
+                              label: 'Sessions',
+                              value: '${overview.totalSessions}',
+                              unit: 'runs',
+                              icon: Icons.assignment_outlined,
+                              onTap: () => onSwitchTab(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: MetricReadout(
+                              label: 'Nodes',
+                              value: '${overview.totalDevices}',
+                              unit: 'registered',
+                              icon: Icons.devices_outlined,
+                              onTap: () =>
+                                  context.go('/devices/$selectedDeviceId'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: MetricReadout(
+                              label: 'Events',
+                              value: '${overview.totalEvents}',
+                              unit: 'logged',
+                              icon: Icons.timeline_outlined,
+                              onTap: () => onSwitchTab(1),
+                            ),
+                          ),
+                        ],
+                      ),
+                      loading: () => const SizedBox(
+                        height: 80,
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      error: (err, _) => Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkSurface
+                              : AppColors.pureWhite,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.darkBorder
+                                : AppColors.warmStone,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: MetricReadout(
-                            label: 'Nodes',
-                            value: '3',
-                            unit: 'paired',
-                            icon: Icons.devices_outlined,
-                            onTap: () =>
-                                context.go('/devices/$selectedDeviceId'),
-                          ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.wifi_off_rounded,
+                              size: 16,
+                              color: AppColors.warmGraphite,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Metrics unavailable — connect to backend to view live statistics',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.warmGraphite,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: MetricReadout(
-                            label: 'Events',
-                            value: '24',
-                            unit: 'logged',
-                            icon: Icons.timeline_outlined,
-                            onTap: () => onSwitchTab(1),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
               ),
+
               const SizedBox(height: 20),
 
-              // Quick Workflow Actions with Tactile Feedback
+              // ── Workflow Actions ──
               StaggeredEntrance(
                 index: 3,
                 child: Column(
@@ -551,48 +691,112 @@ class _HomeTab extends ConsumerWidget {
                   ],
                 ),
               ),
+
               const SizedBox(height: 12),
 
-              // Recent Activity Log Card
+              // ── Recent Activity (REAL data from dashboard/recent-activity API) ──
               StaggeredEntrance(
                 index: 4,
                 child: IndustrialCard(
                   title: 'Recent Diagnostic Events',
-                  subtitle: 'Last Recorded Telemetry Bursts',
+                  subtitle: 'Latest recorded telemetry from backend',
                   trailing: TextButton(
                     onPressed: () => onSwitchTab(2),
                     child: const Text('View All'),
                   ),
-                  child: Column(
-                    children: [
-                      _buildActivityTile(
-                        context,
-                        icon: Icons.play_circle_outline_rounded,
-                        iconColor: AppColors.alertOk,
-                        title: 'Diagnostic Session #104 Completed',
-                        time: '2 hours ago • Pipe Line A-4',
-                        status: 'OK',
-                        statusType: StatusType.ok,
+                  child: activityAsync.when(
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.history_rounded,
+                                size: 18,
+                                color: AppColors.warmGraphite,
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'No recent activity — press the BOOT button on the device to start a session.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.warmGraphite,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return Column(
+                        children: items.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final item = entry.value;
+                          final isAlert = item.details['alert'] == 'DANGER' ||
+                              item.details['alert'] == 'CAUTION';
+                          return Column(
+                            children: [
+                              if (idx > 0) const Divider(height: 1),
+                              _buildActivityTile(
+                                context,
+                                icon: item.type == 'session'
+                                    ? Icons.play_circle_outline_rounded
+                                    : isAlert
+                                        ? Icons.warning_amber_rounded
+                                        : Icons.sensors_rounded,
+                                iconColor: item.type == 'session'
+                                    ? AppColors.alertOk
+                                    : isAlert
+                                        ? AppColors.alertCaution
+                                        : AppColors.burntOrange,
+                                title: item.title,
+                                time: _formatRelativeTime(item.timestamp),
+                                alert: isAlert ? item.details['alert'] as String? : null,
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      );
+                    },
+                    loading: () => const SizedBox(
+                      height: 60,
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      const Divider(),
-                      _buildActivityTile(
-                        context,
-                        icon: Icons.warning_amber_rounded,
-                        iconColor: AppColors.alertCaution,
-                        title: 'Acoustic Anomaly Flagged',
-                        time: '5 hours ago • Valve V-02',
-                        status: 'CAUTION',
-                        statusType: StatusType.caution,
+                    ),
+                    error: (err, _) => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.wifi_off_rounded,
+                            size: 18,
+                            color: AppColors.warmGraphite,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Recent activity unavailable — connect to backend to view live data.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.warmGraphite,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
+
+              const SizedBox(height: 24),
             ],
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
   Widget _buildActivityTile(
     BuildContext context, {
@@ -600,8 +804,7 @@ class _HomeTab extends ConsumerWidget {
     required Color iconColor,
     required String title,
     required String time,
-    required String status,
-    required StatusType statusType,
+    String? alert,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -638,14 +841,34 @@ class _HomeTab extends ConsumerWidget {
               ],
             ),
           ),
-          StatusPill(label: status, type: statusType),
+          if (alert != null)
+            StatusPill(
+              label: alert,
+              type: alert == 'DANGER'
+                  ? StatusType.danger
+                  : StatusType.caution,
+            ),
         ],
       ),
     );
   }
+
+  /// Formats a [DateTime] as a human-readable relative string (e.g. "2 hours ago").
+  static String _formatRelativeTime(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt.isUtc ? dt.toLocal() : dt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return DateFormat('MMM d').format(dt.isUtc ? dt.toLocal() : dt);
+  }
 }
 
-// Inspect Tab Placeholder wrapper
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab wrapper widgets
+// ──────────────────────────────────────────────────────────────────────────────
+
 class _InspectTab extends StatelessWidget {
   const _InspectTab();
 
@@ -655,7 +878,6 @@ class _InspectTab extends StatelessWidget {
   }
 }
 
-// History Tab Placeholder wrapper
 class _HistoryTab extends StatelessWidget {
   const _HistoryTab();
 
@@ -665,7 +887,6 @@ class _HistoryTab extends StatelessWidget {
   }
 }
 
-// Settings Tab Placeholder wrapper
 class _SettingsTab extends StatelessWidget {
   const _SettingsTab();
 

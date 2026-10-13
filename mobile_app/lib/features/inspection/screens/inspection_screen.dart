@@ -15,9 +15,7 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../core/config/app_config.dart';
 import '../../../shared/motion/staggered_entrance.dart';
 import '../../../shared/motion/pulsing_beacon.dart';
-import '../../../shared/motion/animated_fft_spectrum.dart';
 import '../../../shared/backgrounds/diagnostic_radar_sweep.dart';
-import '../../../shared/backgrounds/acoustic_signal_field.dart';
 import '../../../shared/backgrounds/animated_screen_background.dart';
 
 final deviceStatusProvider =
@@ -243,35 +241,108 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Live Waveform Stream Trace
-            const StaggeredEntrance(
+            // Real Acoustic Transducer Status & Hardware Rig Ground Truth
+            StaggeredEntrance(
               index: 2,
               child: IndustrialCard(
-                title: 'Acoustic Carrier Stream',
-                subtitle: 'Real-Time Microphone DMA Buffer Activity',
+                title: 'Acoustic Transducer Status',
+                subtitle: 'Contact-Piezo Analog Front-End & FreeRTOS Sampler',
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      height: 80,
-                      child: AcousticSignalField(
-                        height: 80,
-                        opacity: 0.7,
-                        animate: true,
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkSurfaceElevated
+                            : AppColors.industrialIvory,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark
+                              ? AppColors.darkBorder
+                              : AppColors.warmStone,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                    Icons.graphic_eq_rounded,
+                                    size: 16,
+                                    color: AppColors.burntOrange,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'ACOUSTIC RMS (12-BIT ADC)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.6,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                (recentEvents.valueOrNull?.isNotEmpty ?? false) &&
+                                        recentEvents.valueOrNull!.first.rms != null
+                                    ? '${recentEvents.valueOrNull!.first.rms!.toStringAsFixed(1)} ADC'
+                                    : 'AWAITING TELEMETRY',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: (recentEvents.valueOrNull?.isNotEmpty ?? false) &&
+                                          recentEvents.valueOrNull!.first.rms != null
+                                      ? AppColors.burntOrange
+                                      : AppColors.warmGraphite,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: (recentEvents.valueOrNull?.isNotEmpty ?? false) &&
+                                      recentEvents.valueOrNull!.first.rms != null
+                                  ? (recentEvents.valueOrNull!.first.rms! / 1000.0)
+                                      .clamp(0.0, 1.0)
+                                  : 0.0,
+                              minHeight: 8,
+                              backgroundColor: isDark
+                                  ? AppColors.darkBorder
+                                  : AppColors.warmStone,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                ((recentEvents.valueOrNull?.isNotEmpty ?? false) &&
+                                        (recentEvents.valueOrNull!.first.rms ?? 0) > 400)
+                                    ? AppColors.alertDanger
+                                    : AppColors.burntOrange,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(height: 8),
-                    Row(
+                    const SizedBox(height: 10),
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'DMA Window: 4096 Samples',
+                          'Window: 1024 Samples (50% Hop)',
                           style: TextStyle(
                             fontSize: 10,
                             color: AppColors.warmGraphite,
                           ),
                         ),
                         Text(
-                          'Sampling Rate: 192.0 kHz',
+                          'Target Rate: 4000 Hz (Timer ISR)',
                           style: TextStyle(
                             fontSize: 10,
                             color: AppColors.burntOrange,
@@ -280,35 +351,15 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
                         ),
                       ],
                     ),
-                    SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            '16-BAND ULTRASONIC FFT SPECTRUM',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                              color: AppColors.warmGraphite,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          '28-38 kHz Leak Window',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.burntOrange,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Hardware Ground Truth: Piezoelectric contact transducer on ADC1_CH4 with 1.65V virtual ground and IIR DC-block filter (R=0.995). Raw 16-band FFT spectral stream is not transmitted on this firmware revision.',
+                      style: TextStyle(
+                        fontSize: 10,
+                        height: 1.35,
+                        color: AppColors.warmGraphite,
+                      ),
                     ),
-                    SizedBox(height: 6),
-                    AnimatedFftSpectrum(height: 38),
                   ],
                 ),
               ),
@@ -677,24 +728,29 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
     final latestEvent = events != null && events.isNotEmpty ? events.first : null;
     final rmsValue = latestEvent?.rms != null
         ? latestEvent!.rms!.toStringAsFixed(1)
-        : '340.0';
-    final gasValue = latestEvent?.gasDelta != null
-        ? '+${latestEvent!.gasDelta}'
-        : '+42';
+        : '--';
+    final gasDelta = latestEvent?.gasDelta;
+    final gasValue = gasDelta != null
+        ? (gasDelta >= 0 ? '+$gasDelta' : '$gasDelta')
+        : '--';
     final tempValue = latestEvent?.temperature != null
         ? '${latestEvent!.temperature!.toStringAsFixed(1)}°C'
-        : '27.4°C';
+        : 'DISABLED';
     final leakScore = latestEvent?.leakProbability != null
         ? (latestEvent!.leakProbability! * 100).toInt()
-        : 6;
-    final isCritical = leakScore > 60;
+        : null;
+    final isCritical = leakScore != null && leakScore > 60;
 
     return IndustrialCard(
       title: 'Multi-Sensor Hazard Matrix',
       subtitle: 'Ultrasonic Piezo • MQ Gas Delta • Thermal Transducer',
       trailing: StatusPill(
-        label: isCritical ? 'ANOMALY DETECTED' : 'CALIBRATED',
-        type: isCritical ? StatusType.danger : StatusType.ok,
+        label: latestEvent == null
+            ? 'AWAITING TELEMETRY'
+            : (isCritical ? 'ANOMALY DETECTED' : 'NOMINAL BASELINE'),
+        type: latestEvent == null
+            ? StatusType.neutral
+            : (isCritical ? StatusType.danger : StatusType.ok),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -768,7 +824,7 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      '$leakScore%',
+                      leakScore != null ? '$leakScore%' : '--',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -783,7 +839,9 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: (leakScore / 100.0).clamp(0.0, 1.0),
+                    value: leakScore != null
+                        ? (leakScore / 100.0).clamp(0.0, 1.0)
+                        : 0.0,
                     minHeight: 6,
                     backgroundColor: isDark
                         ? AppColors.darkBorder
@@ -816,16 +874,43 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
 
   Widget _buildSimulatorCard(BuildContext context, bool isDark) {
     return IndustrialCard(
-      title: 'Interactive Hardware Rig Simulator',
-      subtitle: 'Broadcast Simulated ESP32 Telemetry to Live Cloud',
+      title: '[TEST BENCH TOOL] Rig Simulation Broadcaster',
+      subtitle: 'Isolated Synthetic Telemetry (Trainee: TR-SIM-DEMO)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Demonstrate real-time acoustic ingestion, cloud processing, and warning triggers without physical ESP32 rig attached:',
-            style: TextStyle(fontSize: 11.5, color: AppColors.warmGraphite),
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppColors.alertCaution.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.alertCaution.withValues(alpha: 0.35),
+              ),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.science_rounded,
+                  size: 16,
+                  color: AppColors.alertCaution,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'TEST BENCH ISOLATION: Broadcasts synthetic frames tagged as trainee "TR-SIM-DEMO" on session 999999 to test API ingestion when physical ESP32 hardware is detached. Synthetic records are not valid for certified trainee assessments.',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.warmGraphite,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
           if (_isSimulating)
             const Center(
               child: Padding(
@@ -840,7 +925,7 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
                     ),
                     SizedBox(width: 10),
                     Text(
-                      'Broadcasting Telemetry Frame to Cloud...',
+                      'Broadcasting Synthetic Frame to Cloud...',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.burntOrange,
@@ -855,14 +940,14 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 IndustrialButton(
-                  label: 'Simulate Nominal Baseline',
+                  label: 'Broadcast Nominal Test Frame',
                   icon: Icons.check_circle_outline_rounded,
                   variant: IndustrialButtonVariant.secondary,
                   onPressed: () => _simulateTelemetry(isLeak: false),
                 ),
                 const SizedBox(height: 8),
                 IndustrialButton(
-                  label: 'Trigger Ultrasonic Leak Burst',
+                  label: 'Broadcast Leak Test Frame',
                   icon: Icons.warning_amber_rounded,
                   onPressed: () => _simulateTelemetry(isLeak: true),
                 ),

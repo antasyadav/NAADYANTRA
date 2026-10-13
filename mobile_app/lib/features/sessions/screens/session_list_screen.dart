@@ -109,16 +109,61 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
                   );
                 }
 
+                final isCached = paginatedResponse.isFromCache;
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),
-                  itemCount: items.length,
+                  itemCount: items.length + (isCached ? 1 : 0),
                   itemBuilder: (context, index) {
-                    final session = items[index];
+                    if (isCached && index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.darkSurfaceElevated
+                                : AppColors.softSand.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? AppColors.darkBorder
+                                  : AppColors.softSand,
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.cloud_off_rounded,
+                                size: 16,
+                                color: AppColors.warmGraphite,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'OFFLINE BUFFER — DISPLAYING PERSISTED SQLITE CACHE',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: AppColors.warmGraphite,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    final actualIndex = isCached ? index - 1 : index;
+                    final session = items[actualIndex];
                     return StaggeredEntrance(
-                      index: index,
+                      index: actualIndex,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: TactilePressable(

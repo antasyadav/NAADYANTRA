@@ -62,6 +62,7 @@ class SessionRepository {
             items: cachedSessions
                 .map((json) => Session.fromJson(json))
                 .toList(),
+            isFromCache: true,
           );
         }
       }

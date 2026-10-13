@@ -202,6 +202,18 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         onTap: () => context.push('/assessments'),
                       ),
+                      const Divider(),
+                      _buildSettingsTile(
+                        icon: Icons.help_outline_rounded,
+                        title: 'Field Guide & Troubleshooting',
+                        subtitle:
+                            'Hardware rigging, sensor semantics & safety protocols',
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.warmGraphite,
+                        ),
+                        onTap: () => context.push('/help'),
+                      ),
                     ],
                   ),
                 ),

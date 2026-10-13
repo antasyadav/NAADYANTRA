@@ -4,6 +4,9 @@ import 'auth_repository.dart';
 import 'device_repository.dart';
 import 'session_repository.dart';
 import 'assessment_repository.dart';
+import 'dashboard_repository.dart';
+import '../models/event.dart';
+import '../models/session.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/storage/local_database.dart';
@@ -49,6 +52,10 @@ final assessmentRepositoryProvider = Provider<AssessmentRepository>((ref) {
   return AssessmentRepository(apiClient: ref.watch(apiClientProvider));
 });
 
+final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
+  return DashboardRepository(apiClient: ref.watch(apiClientProvider));
+});
+
 // Selected Device ID
 final selectedDeviceIdProvider = StateProvider<String?>((ref) {
   return null;
@@ -59,6 +66,23 @@ final devicesProvider = FutureProvider.autoDispose((ref) async {
   final deviceRepo = ref.watch(deviceRepositoryProvider);
   return await deviceRepo.getDevices();
 });
+
+// Device Events Provider
+final deviceEventsProvider =
+    FutureProvider.autoDispose.family<List<Event>, String>((ref, deviceId) async {
+      final repo = ref.watch(deviceRepositoryProvider);
+      return await repo.getDeviceEvents(deviceId, limit: 50);
+    });
+
+// Device Summaries Provider
+final deviceSummariesProvider =
+    FutureProvider.autoDispose.family<List<SessionSummary>, String>((
+      ref,
+      deviceId,
+    ) async {
+      final repo = ref.watch(deviceRepositoryProvider);
+      return await repo.getDeviceSummaries(deviceId, limit: 20);
+    });
 
 // Auth State
 final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
