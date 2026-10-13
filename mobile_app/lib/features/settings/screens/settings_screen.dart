@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/services/providers.dart';
 import '../../../shared/widgets/industrial_card.dart';
@@ -120,7 +121,7 @@ class SettingsScreen extends ConsumerWidget {
                       _buildSettingsTile(
                         icon: Icons.alt_route_rounded,
                         title: 'FastAPI Backend Host',
-                        subtitle: 'http://10.0.2.2:8000',
+                        subtitle: AppConfig.defaultApiBaseUrl,
                         trailing: const StatusPill(
                           label: 'ACTIVE',
                           type: StatusType.ok,
@@ -130,7 +131,7 @@ class SettingsScreen extends ConsumerWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'Endpoint configured via AppConfig.apiBaseUrl',
+                                'Endpoint configured via AppConfig.defaultApiBaseUrl',
                               ),
                               behavior: SnackBarBehavior.floating,
                             ),

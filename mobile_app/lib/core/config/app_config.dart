@@ -2,8 +2,9 @@ import 'package:flutter/foundation.dart';
 
 class AppConfig {
   // API Configuration
-  static const String defaultApiBaseUrl = 'http://10.0.2.2:8000';
-  static const String productionApiBaseUrl = 'https://api.naadyantra.com';
+  static const String defaultApiBaseUrl = 'https://naadyantra.onrender.com';
+  static const String productionApiBaseUrl = 'https://naadyantra.onrender.com';
+  static const String localApiBaseUrl = 'http://10.0.2.2:8000';
 
   // Connection Timeouts
   static const Duration connectTimeout = Duration(seconds: 30);
