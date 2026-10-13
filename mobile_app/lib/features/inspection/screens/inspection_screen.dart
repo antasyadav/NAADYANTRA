@@ -243,17 +243,19 @@ class _AnimatedArcGaugeState extends State<_AnimatedArcGauge>
     return RepaintBoundary(
       child: SizedBox(
         height: 120,
+        width: double.infinity,
         child: AnimatedBuilder(
           animation: _anim,
           builder: (_, _) => Stack(
             alignment: Alignment.center,
             children: [
-              CustomPaint(
-                size: const Size(double.infinity, 120),
-                painter: _ArcGaugePainter(
-                  progress: _anim.value,
-                  arcColor: widget.color,
-                  trackColor: isDark ? AppColors.darkBorder : AppColors.warmStone,
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ArcGaugePainter(
+                    progress: _anim.value,
+                    arcColor: widget.color,
+                    trackColor: isDark ? AppColors.darkBorder : AppColors.warmStone,
+                  ),
                 ),
               ),
               Positioned(
@@ -748,11 +750,14 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
               ),
               const SizedBox(height: 12),
 
-              // ── Error state ─────────────────────────────────
-              if (recentEvents.hasError)
+              // ── Error state (combined — show once) ────────────
+              if (recentEvents.hasError || deviceStatus.hasError)
                 StaggeredEntrance(
                   index: 1,
-                  child: _buildErrorCard(recentEvents.error!, isDark),
+                  child: _buildErrorCard(
+                    recentEvents.error ?? deviceStatus.error!,
+                    isDark,
+                  ),
                 ),
 
               // ── Device header ────────────────────────────────
@@ -762,10 +767,7 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
                   child: _buildNodeHeaderCard(status, isDark),
                 ),
                 loading: () => const SizedBox.shrink(),
-                error: (e, _) => StaggeredEntrance(
-                  index: 1,
-                  child: _buildErrorCard(e, isDark),
-                ),
+                error: (_, _) => const SizedBox.shrink(), // already shown above
               ),
               const SizedBox(height: 12),
 
@@ -1004,14 +1006,15 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
             RepaintBoundary(
               child: SizedBox(
                 height: 52,
+                width: double.infinity,
                 child: CustomPaint(
-                  size: const Size(double.infinity, 52),
                   painter: _SparklinePainter(
                     values: rmsHistory,
                     lineColor: isCritical
                         ? AppColors.alertDanger
                         : AppColors.burntOrange,
                   ),
+                  child: const SizedBox.expand(),
                 ),
               ),
             ),
@@ -1051,8 +1054,8 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
     bool isDark,
   ) {
     return IndustrialCard(
-      title: 'MULTI-SENSOR HAZARD MATRIX',
-      subtitle: 'Live telemetry · Leak Ring · Gas Bar · Aux Sensors',
+      title: 'HAZARD MATRIX',
+      subtitle: 'Leak · Gas · Thermal · Moisture · UV',
       trailing: StatusPill(
         label: latest == null
             ? 'AWAITING'
