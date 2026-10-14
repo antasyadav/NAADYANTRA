@@ -1,0 +1,3 @@
+# This directory is for trained and exported model artifacts
+# TFLite, ONNX, and other model files go here
+# Files in this directory are excluded from Git by .gitignore

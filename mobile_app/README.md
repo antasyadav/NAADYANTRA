@@ -1,10 +1,10 @@
-# NAADYANTRA Mobile App
+# HazGuard Mobile App
 
-Flutter mobile application for the NAADYANTRA diagnostic sensing and vocational training platform.
+Flutter mobile application for the HazGuard diagnostic sensing and vocational training platform.
 
 ## Overview
 
-The NAADYANTRA mobile app is the trainee-facing interface for the ESP32-based diagnostic sensing platform. It provides:
+The HazGuard mobile app is the trainee-facing interface for the ESP32-based diagnostic sensing platform. It provides:
 
 - Device connectivity monitoring
 - Live inspection data viewing
@@ -62,7 +62,7 @@ lib/
 - Flutter SDK 3.13.2 or higher
 - Android Studio or VS Code with Flutter extension
 - Android SDK for Android development
-- Running NAADYANTRA backend server
+- Running HazGuard backend server
 
 ### Installation
 
@@ -105,7 +105,7 @@ The APK will be in `build/app/outputs/flutter-apk/`
 
 ## Backend Integration
 
-The mobile app integrates with the NAADYANTRA FastAPI backend. Ensure the backend is running before using the app.
+The mobile app integrates with the HazGuard FastAPI backend. Ensure the backend is running before using the app.
 
 ### Default Configuration
 
@@ -233,4 +233,4 @@ dart format .
 
 ## License
 
-This is part of the NAADYANTRA project for SIH 2026.
+This is part of the HazGuard project for SIH 2026.

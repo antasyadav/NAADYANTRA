@@ -1,8 +1,8 @@
-# NAADYANTRA Backend Implementation Report
+# HazGuard Backend Implementation Report
 
 ## Executive Summary
 
-The complete backend for NAADYANTRA has been successfully implemented and verified. This backend provides full ESP32 firmware compatibility, comprehensive API coverage, authentication, assessment workflows, and dashboard capabilities for the SIH 2026 diagnostic sensing and vocational training platform.
+The complete backend for HazGuard has been successfully implemented and verified. This backend provides full ESP32 firmware compatibility, comprehensive API coverage, authentication, assessment workflows, and dashboard capabilities for the SIH 2026 diagnostic sensing and vocational training platform.
 
 ## Verification Results
 
@@ -763,7 +763,7 @@ Based on simulated API testing, the backend should:
 
 ## Conclusion
 
-The NAADYANTRA backend is **software-verified and ready for ESP32 integration**. All automated tests pass, migrations work correctly, startup is successful, and the firmware API has been verified with curl.
+The HazGuard backend is **software-verified and ready for ESP32 integration**. All automated tests pass, migrations work correctly, startup is successful, and the firmware API has been verified with curl.
 
 ### Software Status: ✅ READY
 - 37/37 tests passing

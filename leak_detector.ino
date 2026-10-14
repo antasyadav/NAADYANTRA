@@ -1,6 +1,6 @@
 /*
  * =============================================================================
- *  NAADYANTRA: Multi-Modal Acoustic & Hazardous Environment Diagnostic Firmware
+ *  HazGuard: Multi-Modal Acoustic & Hazardous Environment Diagnostic Firmware
  *  Platform: ESP32-S3 / ESP32 DevKit (Dual-Core 240MHz Xtensa)
  *  SIH 2026 - Problem Statement: PS26244
  *  Firmware Version: 1.1.0
@@ -49,7 +49,7 @@
 #define RUN_MODE_COLLECT  1
 #define RUN_MODE          RUN_MODE_DETECT   // Set to RUN_MODE_COLLECT for dataset acquisition
 
-#define USE_EDGE_IMPULSE      1   // 0 = RMS fallback detector, 1 = Edge Impulse TinyML
+#define USE_EDGE_IMPULSE      0   // 0 = RMS fallback detector (verified buildable), 1 = Edge Impulse TinyML
 #define USE_REFERENCE_SENSOR  0   // Dual microphone ambient noise subtraction
 #define HAS_GAS_SENSOR        1
 #define HAS_MOISTURE_SENSOR   1
@@ -127,7 +127,7 @@
 // ---- Combustible Gas (MQ Sensor Calibration) ---- (ADC raw counts, 0-4095)
 #define GAS_WARMUP_S          60     // Pre-heat stabilization period in seconds
 #define GAS_WARN_DELTA        150    // Warning delta above ambient baseline
-#define GAS_ALARM_DELTA       400    // Critical alarm delta above ambient baseline
+#define GAS_ALARM_DELTA      400    // Critical alarm delta above ambient baseline
 // Load resistor and voltage divider parameters for Rs/R0 calculations
 #define GAS_RL_KOHM           10.0f  // module ka load resistor
 #define GAS_VCC               5.0f   // sensor heater/divider supply
@@ -196,7 +196,9 @@ struct AcousticResult {
   char     topLabel[20];
 };
 
-struct LogItem { uint32_t session; LogKind kind; char trainee[16]; char json[320]; };
+// critical=true means the item survives queue saturation (alarm/session events).
+// critical=false items (routine 'snap' telemetry) are discarded first when the queue is full.
+struct LogItem { uint32_t session; LogKind kind; bool critical; char trainee[16]; char json[320]; };
 
 // Consecutive window debouncer to prevent rapid signal chatter
 struct Debounce {
@@ -250,10 +252,13 @@ struct App {
   // verdict + outputs
   Alert alert = ALERT_CAUTION; Cause cause = CAUSE_STARTUP; uint8_t faultMask = 0;
   uint16_t buzzPat = 0, vibPat = 0; bool buzzOn = false; uint32_t beepUntil = 0;
-  // ui
+  // ui — _lastOledAlert/Cause used to detect state changes for faster redraw
   uint32_t lastOledMs = 0, msgUntil = 0; char msg[22] = ""; bool oledInv = false;
+  Alert _lastOledAlert = ALERT_CAUTION; Cause _lastOledCause = CAUSE_STARTUP;
   // session
   Session sess; uint32_t lastSnapMs = 0, lastDbgMs = 0;
+  // instrumentation
+  uint32_t minFreeHeap = UINT32_MAX;
 };
 
 // =============================================================================
@@ -590,20 +595,31 @@ static void runModel(float* x, AcousticResult& r) {
 #endif
 }
 
-// Process incoming audio window and feed model tensor
+// Process incoming audio window and run detection.
+// When USE_EDGE_IMPULSE==0 (RMS fallback), the int16->float copy into gFeat is
+// skipped entirely; RMS is computed directly from the ring buffer to avoid a
+// 16 KB unnecessary memory write every 500 ms on Core 0.
 static void inferenceStep() {
   const uint32_t head = gHead.load(std::memory_order_acquire);
   if (head < gWin) return;                         // Wait until circular buffer accumulates a full window
   const uint32_t start = head - gWin;
-  for (uint32_t i = 0; i < gWin; i++) gFeat[i] = (float)gRing[(start + i) & gRingMask];
 
   AcousticResult r;
   memset(&r, 0, sizeof(r));
+
+#if USE_EDGE_IMPULSE
+  // TinyML path: copy ring buffer to float feature array for model input.
+  for (uint32_t i = 0; i < gWin; i++) gFeat[i] = (float)gRing[(start + i) & gRingMask];
   r.rms = rmsOf(gFeat, gWin);
+#else
+  // RMS fallback path: compute energy directly from the int16 ring buffer.
+  // No float copy needed — avoids 16 KB write every hop interval.
+  r.rms = ringRms(gRing, start, gWin);
+  (void)gFeat;  // gFeat allocated but unused in fallback mode
+#endif
+
 #if USE_REFERENCE_SENSOR
   r.refRms = ringRms(gRefRing, start, gWin);
-#else
-  (void)ringRms;
 #endif
   runModel(gFeat, r);
   xQueueOverwrite(gResultQ, &r);
@@ -649,10 +665,21 @@ static void enqueueLog(const LogItem& it) {
   Serial.printf("[log] %s %s\n", it.trainee, it.json);
 #endif
   if (!gLogQ) return;
-  if (xQueueSend(gLogQ, &it, 0) != pdTRUE) {       // Ring queue: drop oldest telemetry frame when saturated
-    LogItem dropped;
-    xQueueReceive(gLogQ, &dropped, 0);
-    xQueueSend(gLogQ, &it, 0);
+  if (xQueueSend(gLogQ, &it, 0) != pdTRUE) {
+    // Queue full: only drop the oldest item if it is non-critical (routine snap).
+    // If the oldest item is critical (alarm/session boundary), discard the incoming
+    // item instead — unless the incoming item is itself critical, in which case
+    // we still drop the oldest to preserve the most recent alarm.
+    LogItem peeked;
+    if (xQueuePeek(gLogQ, &peeked, 0) == pdTRUE) {
+      if (!peeked.critical || it.critical) {
+        // Drop the oldest: either it is non-critical, or both are critical (keep newest).
+        LogItem dropped;
+        xQueueReceive(gLogQ, &dropped, 0);
+        xQueueSend(gLogQ, &it, 0);
+      }
+      // else: oldest is critical, incoming is non-critical — silently drop incoming.
+    }
   }
 }
 
@@ -660,6 +687,10 @@ static void logEvent(const char* ev, uint32_t now) {
   if (!app.sess.active) return;
   LogItem it;
   it.session = app.sess.id; it.kind = LOGK_EVENT;
+  // Critical events: session boundaries and active danger alarms must survive queue saturation.
+  it.critical = (app.alert == ALERT_DANGER ||
+                 strncmp(ev, "session_start", 13) == 0 ||
+                 strncmp(ev, "session_stop",  12) == 0);
   snprintf(it.trainee, sizeof(it.trainee), "%s", gTrainee);
   const int n = snprintf(it.json, sizeof(it.json),
     "{\"t\":%lu,\"up\":%lu,\"ev\":\"%s\",\"alert\":\"%s\",\"cause\":\"%s\",\"lbl\":\"%s\","
@@ -674,6 +705,7 @@ static void logEvent(const char* ev, uint32_t now) {
 static void logSummary(uint32_t now) {
   LogItem it;
   it.session = app.sess.id; it.kind = LOGK_SUMMARY;
+  it.critical = true;  // Session summaries are always critical — preserve over routine snaps.
   snprintf(it.trainee, sizeof(it.trainee), "%s", gTrainee);
   const int n = snprintf(it.json, sizeof(it.json),
     "{\"t\":%lu,\"dur_s\":%lu,\"windows\":%lu,\"leak_events\":%lu,\"gas_events\":%lu,\"wet_events\":%lu,"
@@ -716,13 +748,23 @@ static void uploaderTask(void*) {
   secure.setInsecure();              // Insecure TLS context for local bench testing
   bool ntpStarted = false;
   uint32_t lastKick = millis();
+  // Progressive backoff: start at 5s, double on each miss, cap at 60s.
+  // This prevents the 500 ms Wi-Fi retry storm from flooding the radio stack.
+  uint32_t reconnectBackoffMs = 5000;
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
       gWifiUp = false;
-      if (millis() - lastKick > 20000) { lastKick = millis(); WiFi.disconnect(); WiFi.begin(WIFI_SSID, WIFI_PASSWORD); }
+      if (millis() - lastKick > reconnectBackoffMs) {
+        lastKick = millis();
+        WiFi.disconnect();
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        reconnectBackoffMs = (reconnectBackoffMs < 60000) ? reconnectBackoffMs * 2 : 60000;
+      }
       vTaskDelay(pdMS_TO_TICKS(500));
       continue;
     }
+    // Connected: reset backoff.
+    reconnectBackoffMs = 5000;
     gWifiUp = true;
     if (!ntpStarted) { configTime(0, 0, "pool.ntp.org", "time.google.com"); ntpStarted = true; }
     LogItem it;
@@ -788,7 +830,11 @@ static void driveOutputs(uint32_t now) {
 }
 
 static void refreshDisplay(uint32_t now) {
-  if (!gOledOk || now - app.lastOledMs < 250) return;
+  // Throttled to 500 ms (was 250 ms). The SSD1306 framebuffer transfer at 100 kHz
+  // I2C consumes ~100 ms per frame. Halving the rate frees ~5% of I2C bus time
+  // and reduces Core 1 loop overhead. Alert-state changes still appear within 500 ms.
+  const bool alertChanged = (app.alert != app._lastOledAlert || app.cause != app._lastOledCause);
+  if (!gOledOk || (now - app.lastOledMs < (alertChanged ? 100u : 500u))) return;
   app.lastOledMs = now;
   char b[32];
   gOled.clearDisplay();
@@ -855,6 +901,9 @@ static void refreshDisplay(uint32_t now) {
   const bool inv = (app.alert == ALERT_DANGER) && ((now / 500) & 1);   // Invert display during critical danger alerts
   if (inv != app.oledInv) { gOled.invertDisplay(inv); app.oledInv = inv; }
   gOled.display();
+  // Track last-rendered state so next call can skip unchanged frames.
+  app._lastOledAlert = app.alert;
+  app._lastOledCause = app.cause;
 }
 
 // ---------- MLX90614 Direct I2C SMBus Driver ----------
@@ -1110,11 +1159,16 @@ static void periodicTasks(uint32_t now) {
 #if DEBUG_SERIAL
   if (now - app.lastDbgMs >= 5000) {
     app.lastDbgMs = now;
-    Serial.printf("[%lus] %s/%s lbl=%s pL=%.2f pN=%.2f rms=%.1f base=%.1f gas=%+d gr=%.2f heat=%.1fC uv=%+d wet=%d wifi=%d ovr=%lu heap=%lu\n",
+    // Track minimum free heap across lifetime for memory regression detection.
+    const uint32_t curHeap = (uint32_t)ESP.getFreeHeap();
+    if (curHeap < app.minFreeHeap) app.minFreeHeap = curHeap;
+    Serial.printf("[%lus] %s/%s lbl=%s pL=%.2f pN=%.2f rms=%.1f base=%.1f gas=%+d gr=%.2f heat=%.1fC uv=%+d wet=%d wifi=%d ovr=%lu heap=%lu minHeap=%lu qd=%lu\n",
                   (unsigned long)(now / 1000), alertName(app.alert), causeName(app.cause), app.label,
                   app.pLeak, app.pNoise, app.rms, gRmsBase.load(), gasDelta(), gasRatio(), app.heat.temp, uvDelta(),
                   app.moist.wet.state ? 1 : 0, gWifiUp ? 1 : 0,
-                  (unsigned long)gOverruns.load(), (unsigned long)ESP.getFreeHeap());
+                  (unsigned long)gOverruns.load(), (unsigned long)curHeap,
+                  (unsigned long)app.minFreeHeap,
+                  (unsigned long)uxQueueMessagesWaiting(gLogQ));
   }
 #endif
 }

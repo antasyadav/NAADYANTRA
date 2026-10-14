@@ -1,4 +1,4 @@
-# NAADYANTRA Mobile App - Phase Completion Report
+# HazGuard Mobile App - Phase Completion Report
 
 ## Implementation Date
 
@@ -6,7 +6,7 @@ October 13, 2026
 
 ## Executive Summary
 
-Successfully completed Phase 1-4 of the NAADYANTRA Flutter mobile app implementation, replacing all placeholder screens with fully functional, repository-backed implementations integrated with the FastAPI backend.
+Successfully completed Phase 1-4 of the HazGuard Flutter mobile app implementation, replacing all placeholder screens with fully functional, repository-backed implementations integrated with the FastAPI backend.
 
 ## Phases Completed
 

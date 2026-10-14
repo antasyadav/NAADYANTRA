@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// NAADYANTRA Approved Design System Tokens
+/// HazGuard Approved Design System Tokens
 /// Cinematic Light Industrial aesthetic with restrained orange accents.
 class AppColors {
   // Brand Canvas & Surfaces

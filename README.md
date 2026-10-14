@@ -1,6 +1,6 @@
-# NAADYANTRA
+# HazGuard
 
-NAADYANTRA is an ESP32-based AI-assisted diagnostic sensing and vocational training platform for SIH 2026 (Problem Statement SIH26244).
+HazGuard is an ESP32-based AI-assisted diagnostic sensing and vocational training platform for SIH 2026 (Problem Statement SIH26244).
 
 ## Overview
 
@@ -185,7 +185,7 @@ The system is designed for vocational training in controlled environments. It sh
 ## Project Structure
 
 ```
-NAADYANTRA/
+HazGuard/
 ├── backend/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI application entry point

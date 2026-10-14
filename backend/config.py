@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite:///./naadyantra.db"
+    database_url: str = "sqlite:///./hazguard.db"
     server_host: str = "0.0.0.0"
     server_port: int = 8000
     environment: str = "development"

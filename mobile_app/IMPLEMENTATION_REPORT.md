@@ -1,8 +1,8 @@
-# NAADYANTRA Mobile App Implementation Report
+# HazGuard Mobile App Implementation Report
 
 ## Executive Summary
 
-A complete Flutter mobile application has been implemented for the NAADYANTRA diagnostic sensing and vocational training platform. The app provides a trainee-facing interface for device monitoring, session history, and assessment viewing, with full integration to the existing FastAPI backend.
+A complete Flutter mobile application has been implemented for the HazGuard diagnostic sensing and vocational training platform. The app provides a trainee-facing interface for device monitoring, session history, and assessment viewing, with full integration to the existing FastAPI backend.
 
 ## Implementation Date
 
@@ -575,7 +575,7 @@ To test with physical ESP32:
 
 ## Conclusion
 
-The NAADYANTRA mobile application foundation is **complete and functional**. The core architecture, authentication, navigation, API integration, and key screens are implemented and working. The app successfully communicates with the backend API and provides a solid foundation for the trainee-facing interface.
+The HazGuard mobile application foundation is **complete and functional**. The core architecture, authentication, navigation, API integration, and key screens are implemented and working. The app successfully communicates with the backend API and provides a solid foundation for the trainee-facing interface.
 
 ### Completion Status
 - **Architecture**: ✅ Complete

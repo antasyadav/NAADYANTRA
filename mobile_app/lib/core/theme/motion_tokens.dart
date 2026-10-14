@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Centralized Motion & Animation Tokens for NAADYANTRA
+/// Centralized Motion & Animation Tokens for HazGuard
 ///
 /// Ensures cinematic consistency across transitions, micro-interactions,
 /// background loops, and entrance choreographies while strictly adhering

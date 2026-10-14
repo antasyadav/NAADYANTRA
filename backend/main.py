@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
-    logger.info("Starting NAADYANTRA backend...")
+    logger.info("Starting HazGuard backend...")
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created/verified")
@@ -34,12 +34,12 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    logger.info("Shutting down NAADYANTRA backend...")
+    logger.info("Shutting down HazGuard backend...")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="NAADYANTRA Backend",
+    title="HazGuard Backend",
     description="Backend for ESP32-based diagnostic sensing and vocational training platform",
     version="1.0.0",
     docs_url="/docs",
@@ -84,7 +84,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/")
 async def root():
     return {
-        "name": "NAADYANTRA Backend",
+        "name": "HazGuard Backend",
         "version": "1.0.0",
         "status": "running",
         "timestamp": datetime.now(timezone.utc).isoformat()

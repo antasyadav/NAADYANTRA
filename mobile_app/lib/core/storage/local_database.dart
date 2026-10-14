@@ -17,7 +17,7 @@ class LocalDatabase {
 
   Future<Database> _initDatabase() async {
     final directory = await getApplicationDocumentsDirectory();
-    final path = join(directory.path, 'naadyantra.db');
+    final path = join(directory.path, 'hazguard.db');
 
     return await openDatabase(
       path,

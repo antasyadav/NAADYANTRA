@@ -1,4 +1,4 @@
-# NAADYANTRA (नाद्यन्त्र) — Complete Architecture Guide
+# HazGuard (नाद्यन्त्र) — Complete Architecture Guide
 > **Written in Easy Language (आसान भाषा में पूरा आर्किटेक्चर गाइड)**  
 > *Acoustic Pipeline & Valve Diagnostic System: Hardware Sensor Node → Signal Processing → FastAPI Backend → Flutter Offline-First Mobile App*
 
@@ -183,4 +183,4 @@ Jab field me mobile internet chala jata hai ya signal nahi hota:
 | **UI Aesthetics** | CustomPainter / Flutter Canvas| Cinematic light industrial styling, symmetric 230° dials |
 
 ---
-*NAADYANTRA — Precision Acoustic Pipe & Valve Diagnostics.*
+*HazGuard — Precision Acoustic Pipe & Valve Diagnostics.*

@@ -1,4 +1,4 @@
-# NAADYANTRA Mobile App - Final Implementation Report
+# HazGuard Mobile App - Final Implementation Report
 
 ## Implementation Date
 
@@ -6,7 +6,7 @@ October 13, 2026
 
 ## Executive Summary
 
-Successfully completed Phase 1-4 of the NAADYANTRA Flutter mobile app with Phase 1-3 (Cache, Device Selection, CSV Export) of the continued implementation. The app now has full offline caching support, device selection, and CSV export functionality integrated with the FastAPI backend.
+Successfully completed Phase 1-4 of the HazGuard Flutter mobile app with Phase 1-3 (Cache, Device Selection, CSV Export) of the continued implementation. The app now has full offline caching support, device selection, and CSV export functionality integrated with the FastAPI backend.
 
 ## Completed Phases
 

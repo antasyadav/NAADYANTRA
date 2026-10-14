@@ -1,6 +1,6 @@
-# NAADYANTRA — Studio Workspace Directives for Autonomous & Pair Agents
+# HazGuard — Studio Workspace Directives for Autonomous & Pair Agents
 
-Refer to [GEMINI.md](file:///d:/NAADYANTRA/GEMINI.md) for full context and visual tokens.
+Refer to [GEMINI.md](file:///d:/HazGuard/GEMINI.md) for full context and visual tokens.
 
 ## Directives Summary
 1. **Inspection First**: Always view existing code before refactoring or extending.
@@ -11,7 +11,7 @@ Refer to [GEMINI.md](file:///d:/NAADYANTRA/GEMINI.md) for full context and visua
    - Dio for API requests.
    - Sqflite for local offline-first persistent caching.
    - FastAPI for backend contract compliance.
-3. **NAADYANTRA Visual Identity**:
+3. **HazGuard Visual Identity**:
    - Palette: Industrial Ivory (`#F7F5F0`), Pure White (`#FFFFFF`), Warm Stone (`#E9E5DE`), Carbon (`#252525`), Warm Graphite (`#716D67`), Burnt Orange (`#F07842`), Dark Burnt Orange (`#A94E29`), Soft Sand (`#D8C9BA`).
    - Strictly avoid cyan, teal, or generic blue.
    - Cinematic light industrial aesthetic with restrained orange accents.

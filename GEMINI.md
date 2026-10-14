@@ -1,4 +1,4 @@
-# NAADYANTRA — Complete AI Engineering & Digital Experience Studio Directives
+# HazGuard — Complete AI Engineering & Digital Experience Studio Directives
 
 ## 1. Operating Philosophy (Principal Software Engineer)
 1. **Inspect Before Modifying**: Inspect active code, call sites, schemas, and dependencies before writing code.
@@ -15,7 +15,7 @@
 
 ---
 
-## 2. Creative Art Direction & NAADYANTRA Approved Design System
+## 2. Creative Art Direction & HazGuard Approved Design System
 
 Cinematic light industrial aesthetic: refined typography, warm ambient lighting, precise technical graphics, clean layouts, and restrained orange emphasis.
 

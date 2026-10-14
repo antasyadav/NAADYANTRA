@@ -1,5 +1,5 @@
 """
-Comprehensive integration tests for NAADYANTRA backend.
+Comprehensive integration tests for HazGuard backend.
 Run: pytest tests/test_backend.py -v
 """
 import pytest

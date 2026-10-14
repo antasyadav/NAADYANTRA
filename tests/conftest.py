@@ -12,7 +12,7 @@ from backend.database import Base, get_db, Device, DeviceCredential, User
 from backend.auth import get_password_hash
 
 # Test database
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_naadyantra.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./test_hazguard.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -44,9 +44,9 @@ def db():
         # Dispose engine to release file locks on Windows
         engine.dispose()
         # Remove test database file
-        if os.path.exists("test_naadyantra.db"):
+        if os.path.exists("test_hazguard.db"):
             try:
-                os.remove("test_naadyantra.db")
+                os.remove("test_hazguard.db")
             except PermissionError:
                 # File still locked, will be cleaned up on next run
                 pass
