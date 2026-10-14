@@ -52,16 +52,16 @@ In [leak_detector.ino](file:///d:/NAADYANTRA/leak_detector.ino#L563-L568):
 `numpy::signal_from_buffer` constructs an Edge Impulse `signal_t` wrapper referencing a contiguous `float*` buffer of length `EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE`.
 
 ### Safe Adapter Rejection Guardrails
-When `#define USE_EDGE_IMPULSE 1` is enabled, the model adapter (`model_adapter.h` / firmware compile-time check) must enforce the following preprocessor assertions:
+When `#define USE_EDGE_IMPULSE 1` is enabled in firmware, the model header must be included before checking constants. Because `EI_CLASSIFIER_FREQUENCY` can be generated as a floating-point literal (e.g. `4000.0f` or `4000.0`), using it in a C preprocessor `#if` expression causes a compiler syntax error. Preprocessor `#if` must be used strictly for integer macros, while frequency is validated via C++ `static_assert`:
 
 ```cpp
 #if USE_EDGE_IMPULSE
+  // 1. Include generated metadata before checking constants
+  #include "model-parameters/model_metadata.h"
+
+  // 2. Preprocessor integer macro assertions
   #if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != 1)
     #error "Model rejection: NAADYANTRA firmware only samples 1 piezo channel (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME must be 1)."
-  #endif
-
-  #if (EI_CLASSIFIER_FREQUENCY != 4000)
-    #error "Model rejection: Sampling frequency mismatch. Firmware timer runs at 4000 Hz (EI_CLASSIFIER_FREQUENCY must be 4000)."
   #endif
 
   #if (EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE != 4000)
@@ -71,10 +71,15 @@ When `#define USE_EDGE_IMPULSE 1` is enabled, the model adapter (`model_adapter.
   #if (EI_CLASSIFIER_LABEL_COUNT != 3)
     #error "Model rejection: Output class count mismatch. Firmware requires exactly 3 classes: normal, leak, noise."
   #endif
+
+  // 3. C++ static_assert for frequency (safely handles float literals)
+  static_assert(static_cast<uint32_t>(EI_CLASSIFIER_FREQUENCY) == 4000,
+                "Model rejection: Sampling frequency mismatch. Firmware timer runs at 4000 Hz.");
 #endif
 ```
 
-If an incoming model violates any of these parameters, it is **rejected at compile-time**, preventing silent memory corruptions, buffer out-of-bounds reads, or acoustic timing mismatches.
+> [!NOTE]
+> These validation checks represent the required adapter guardrails. They have **not yet been executed against the teammate's library** because the artifact has not been delivered. Do not assume all Edge Impulse projects generate identical macros or frame sizes without inspecting the delivered `model_metadata.h`.
 
 ---
 
@@ -111,22 +116,41 @@ To prevent catastrophic train-serve skew between offline Python/Edge Impulse tra
 | :--- | :--- | :--- |
 | **Input Signal Representation** | Centered ADC counts (signed, zero-mean) | Centered ADC counts (signed, zero-mean) |
 | **Numeric Data Type** | `float32` (IEEE 754 single-precision) | `float32` array |
-| **Nominal Signal Range** | Approximately $-2048.0$ to $+2047.0$ | Approximately $-2048.0$ to $+2047.0$ |
+| **Nominal Signal Range** | Approximately $-2048.0$ to $+2047.0$ counts | Approximately $-2048.0$ to $+2047.0$ counts |
 | **High-Pass Filter** | First-order IIR DC-block filter ($R = 0.995$) | Must match $R = 0.995$ filter |
-| **Firmware Normalization** | **None** (zero pre-scaling or z-score in C) | Internal DSP block handles scaling |
+| **Firmware Normalization** | **None** (unscaled centered counts in C) | Internal DSP block handles scaling |
 | **Input Frame Length** | Exactly 4,000 samples ($1000\text{ ms}$ @ $4\text{ kHz}$) | Exactly 4,000 samples |
 | **Output Label Order** | `[0: "normal", 1: "leak", 2: "noise"]` | `[0: "normal", 1: "leak", 2: "noise"]` |
 
+> [!WARNING]
+> **Train-Serve Audio Scaling Mismatch Risk:**  
+> The firmware delivers unscaled, centered `float32` ADC counts ($\pm 2048$ nominal range) directly to `numpy::signal_from_buffer()`.  
+> If the teammate's model is trained on standard floating-point audio WAV files (normalized to $[-1.0, +1.0]$) or 16-bit PCM ($\pm 32768$) without applying the identical scaling transform in Edge Impulse Studio, the model input magnitudes will be mismatched by orders of magnitude, causing inference failure.  
+> Training data collected via `leak_detector.ino` in `RUN_MODE_COLLECT` (which streams raw DC-blocked integer counts at 921600 baud) avoids this skew.
+
 ---
 
-## 4. Preservation of Fallback Mechanism
+## 4. Preservation of Fallback Mechanism & Threshold Mathematical Relationship
 
 The deterministic fallback detector is **preserved as the active implementation**:
 - `leak_detector.ino` maintains `#define USE_EDGE_IMPULSE 0`.
 - The fallback algorithm computes the energy ratio between the current window RMS and the calibrated baseline RMS:
   $$R_{\text{RMS}} = \frac{\text{RMS}_{\text{window}}}{\text{RMS}_{\text{baseline}}}$$
-  $$\text{pLeak} = \text{clamp}\left(\frac{R_{\text{RMS}} - 1.0}{3.0 - 1.0},\ 0.0,\ 1.0\right)$$
-- If $\text{pLeak} \ge 0.65$ for 2 consecutive windows, `ROLE_LEAK` is asserted.
+  $$\text{pLeak} = \text{clamp}\left(\frac{R_{\text{RMS}} - 1.0}{\text{FALLBACK\_LEAK\_RATIO} - 1.0},\ 0.0,\ 1.0\right) = \text{clamp}\left(\frac{R_{\text{RMS}} - 1.0}{2.0},\ 0.0,\ 1.0\right)$$
+
+### Mathematical Derivation of Detector Transitions:
+1. **Quiescent / Normal:** When $R_{\text{RMS}} < 1.0$, $\text{pLeak} = 0.0$ and $\text{pNormal} = 1.0$.
+2. **Intermediate Warning:** When $R_{\text{RMS}} = 2.0$, $\text{pLeak} = 0.50$. The OLED and telemetry label switch to `"leak(rms)"`, but the operational role remains `ROLE_UNCERTAIN` because $\text{pLeak} < 0.65$.
+3. **Leak Trip Threshold:** Setting $\text{pLeak} \ge 0.65$ (`LEAK_PROB_MIN`):
+   $$\frac{R_{\text{RMS}} - 1.0}{2.0} \ge 0.65 \implies R_{\text{RMS}} - 1.0 \ge 1.30 \implies \mathbf{R_{\text{RMS}} \ge 2.30}$$
+   Therefore, **the leak detector asserts `ROLE_LEAK` at $R_{\text{RMS}} \ge 2.30$**, NOT $3.0$.
+4. **Saturation:** A ratio of $R_{\text{RMS}} \ge 3.0$ (`FALLBACK_LEAK_RATIO`) saturates the score at $\mathbf{\text{pLeak} = 1.0}$.
+5. **Debounce Confirmation:** `ROLE_LEAK` must be sustained for **2 consecutive windows** ($1.0\text{ s}$) via `app.leak.update()` before triggering `ALERT_DANGER` / `CAUSE_LEAK`.
+
+> [!CAUTION]
+> **Heuristic Score vs. Probability Labeling:**  
+> The variable name `pLeak` and JSON field `pl` are legacy names. In fallback mode, `pLeak` is strictly a **heuristic normalized energy ratio score**, NOT a statistical probability. It must be communicated as a rule-based score.
+
 - The telemetry label emitted is `"leak(rms)"` or `"no_leak(rms)"`, preventing any operator confusion with machine learning inference.
 - **Rule:** Under no circumstance will synthetic or fabricated predictions be hardcoded to simulate model execution. The fallback remains active until real model headers and binaries are provided.
 
@@ -186,7 +210,7 @@ When the teammate delivers the acoustic TinyML model, they must supply the follo
 ## 7. Next Steps
 
 1. Teammate completes and returns the Handoff Checklist above along with the C++ model archive.
-2. Verify headers against preprocessor safety guards.
-3. Place model files in `mobile_app/` or Arduino `libraries/` directory.
+2. Verify headers against preprocessor and C++ compile-time safety guards.
+3. Extract model library files into the Arduino `libraries/` directory (e.g. `Arduino/libraries/<project_name>_inferencing/`) or PlatformIO `lib/` directory. *(Note: Do NOT place firmware C++ library files in `mobile_app/`, which is the Flutter client).*
 4. Set `#define USE_EDGE_IMPULSE 1` in `leak_detector.ino`.
 5. Execute target build using `arduino-cli compile` on the bench workstation.

@@ -75,6 +75,12 @@ The binding input format for the model is **4,000 raw time-domain audio samples*
 | **Data Type in Memory** | `float32` array (`gFeat[4000]`) | `float gFeat[4000]` | Centered ADC counts (virtual ground at ~0) |
 | **Input Shape to Model** | `[1, 4000]` (single channel) | `EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME = 1` | 1-axis contact piezo |
 
+> [!WARNING]
+> **Train-Serve Audio Scaling Mismatch Risk:**  
+> The firmware delivers unscaled, centered `float32` ADC counts ($\pm 2048$ nominal range) directly to `numpy::signal_from_buffer()`.  
+> If the teammate's model is trained on standard floating-point audio WAV files (normalized to $[-1.0, +1.0]$) or 16-bit PCM ($\pm 32768$) without applying the identical scaling transform in Edge Impulse Studio, the model input magnitudes will be mismatched by orders of magnitude, causing inference failure.  
+> Training data collected via `leak_detector.ino` in `RUN_MODE_COLLECT` (which streams raw DC-blocked integer counts at 921600 baud) avoids this skew.
+
 ---
 
 ## 3. Edge Impulse Metadata & Header Verification
@@ -90,10 +96,20 @@ When exporting the model from Edge Impulse Studio as a **C++ Library**, the team
 #define EI_CLASSIFIER_LABEL_COUNT             3
 ```
 
+### Preprocessor & C++ Compile-Time Guardrail Rules
+1. **Include Metadata Header First:** `#include "model-parameters/model_metadata.h"` must occur before any macro validation checks.
+2. **Integer Macros via `#if`:** Integer constants (`EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME`, `EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE`, `EI_CLASSIFIER_LABEL_COUNT`) can be safely checked using preprocessor `#if` directives.
+3. **Frequency Check via C++ `static_assert`:** In Edge Impulse, `EI_CLASSIFIER_FREQUENCY` can be defined as a floating-point literal (e.g. `4000.0f` or `4000.0`). The C preprocessor evaluates only integer arithmetic and will throw a syntax error (`error: floating constant in preprocessor expression`) if evaluated in `#if`. Frequency validation must use C++ `static_assert`:
+   ```cpp
+   static_assert(static_cast<uint32_t>(EI_CLASSIFIER_FREQUENCY) == 4000,
+                 "Sampling frequency mismatch: EI_CLASSIFIER_FREQUENCY must be 4000 Hz");
+   ```
+
 > [!WARNING]
 > **Do not assume `EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE == 4000` automatically.**  
 > If Edge Impulse Studio downsampled the frequency (e.g., to 2000 Hz) or configured a window shorter than 1000 ms, `EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE` will differ.  
 > If `EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE != 4000`, `numpy::signal_from_buffer(x, ...)` will read out-of-bounds or fail. The teammate must confirm this value matches 4,000.
+> **Note:** These compile-time checks have not been tested against the teammate's model because the artifact has not yet been delivered.
 
 ---
 
@@ -157,9 +173,22 @@ $$\text{RMS}_{\text{window}} = \sqrt{\frac{1}{4000} \sum_{i=0}^{3999} gRing[\tex
 
 $$R_{\text{RMS}} = \frac{\text{RMS}_{\text{window}}}{\text{RMS}_{\text{baseline}}}$$
 
-$$\text{pLeak} = \text{clamp}\left(\frac{R_{\text{RMS}} - 1.0}{\text{FALLBACK\_LEAK\_RATIO} - 1.0},\ 0.0,\ 1.0\right) \quad (\text{where } \text{FALLBACK\_LEAK\_RATIO} = 3.0\text{f})$$
+$$\text{pLeak} = \text{clamp}\left(\frac{R_{\text{RMS}} - 1.0}{\text{FALLBACK\_LEAK\_RATIO} - 1.0},\ 0.0,\ 1.0\right) = \text{clamp}\left(\frac{R_{\text{RMS}} - 1.0}{2.0},\ 0.0,\ 1.0\right) \quad (\text{where } \text{FALLBACK\_LEAK\_RATIO} = 3.0\text{f})$$
 
 $$\text{pNormal} = 1.0 - \text{pLeak}$$
+
+### Mathematical Derivation of Detector Transitions:
+1. **Quiescent / Normal:** When $R_{\text{RMS}} < 1.0$, $\text{pLeak} = 0.0$ and $\text{pNormal} = 1.0$.
+2. **Intermediate Warning:** When $R_{\text{RMS}} = 2.0$, $\text{pLeak} = 0.50$. The OLED and telemetry label switch to `"leak(rms)"`, but the operational role remains `ROLE_UNCERTAIN` because $\text{pLeak} < 0.65$.
+3. **Leak Trip Threshold:** Setting $\text{pLeak} \ge 0.65$ (`LEAK_PROB_MIN`):
+   $$\frac{R_{\text{RMS}} - 1.0}{2.0} \ge 0.65 \implies R_{\text{RMS}} - 1.0 \ge 1.30 \implies \mathbf{R_{\text{RMS}} \ge 2.30}$$
+   Therefore, **the leak detector asserts `ROLE_LEAK` at $R_{\text{RMS}} \ge 2.30$**, NOT $3.0$.
+4. **Saturation:** A ratio of $R_{\text{RMS}} \ge 3.0$ (`FALLBACK_LEAK_RATIO`) saturates the score at $\mathbf{\text{pLeak} = 1.0}$.
+5. **Debounce Confirmation:** `ROLE_LEAK` must be sustained for **2 consecutive windows** ($1.0\text{ s}$) via `app.leak.update()` before triggering `ALERT_DANGER` / `CAUSE_LEAK`.
+
+> [!CAUTION]
+> **Heuristic Score vs. Probability Labeling:**  
+> The variable name `pLeak` and JSON field `pl` are legacy names. In fallback mode, `pLeak` is strictly a **heuristic normalized energy ratio score**, NOT a statistical probability. It must be communicated as a rule-based score.
 
 ### Role Classification & Debounce
 - **Classification (`decideRole`):**
@@ -260,6 +289,7 @@ When delivering the model, the teammate must provide:
 - [ ] **5. Score Calibration:** Statement of whether scores are uncalibrated Softmax or temperature-scaled ($T$).
 - [ ] **6. Dataset Provenance Disclosure:** Statement of training data origin (Synthetic vs. Physical Bench).
 - [ ] **7. Model Adapter Implementation:** Working C++ implementation of `tinyml_init()` and `tinyml_infer()` conforming to [Section 11](#11-adapter-header-specification-model_adapterh).
+- [ ] **8. Firmware File Placement:** Confirm files are extracted into the Arduino `libraries/` directory (e.g., `Arduino/libraries/<project_name>_inferencing/`) or PlatformIO `lib/` directory. *(Do NOT place model files in `mobile_app/`, which is the Flutter mobile client).*
 
 ---
 
