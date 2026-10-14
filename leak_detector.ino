@@ -758,7 +758,7 @@ static void uploaderTask(void*) {
         lastKick = millis();
         WiFi.disconnect();
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        reconnectBackoffMs = (reconnectBackoffMs < 60000) ? reconnectBackoffMs * 2 : 60000;
+        reconnectBackoffMs = (reconnectBackoffMs <= 30000) ? reconnectBackoffMs * 2 : 60000;
       }
       vTaskDelay(pdMS_TO_TICKS(500));
       continue;

@@ -398,3 +398,155 @@ class TestSensorDisabledStates:
     def test_sensor_fault_cause_is_fault(self):
         valid_fault_causes = {"FAULT"}
         assert "FAULT" in valid_fault_causes
+
+
+# =============================================================================
+# Targeted Stress Tests: Queue Saturation & Priority Invariants
+# =============================================================================
+
+class TestQueueSaturationAndPriorityUnderStress:
+    """Rigorous verification that critical alerts are never silently lost under load."""
+
+    def test_burst_routine_telemetry_never_evicts_critical_alarm(self):
+        """Even with 1,000 incoming non-critical snaps, an enrolled critical alarm stays queued."""
+        q = LogQueue(capacity=40)
+        # Pre-fill with routine snaps
+        for i in range(20):
+            q.enqueue({"event": f"snap_pre_{i}", "critical": False})
+
+        # Enqueue 1 critical alarm (e.g. GAS_ALARM)
+        assert q.enqueue({"event": "GAS_ALARM", "critical": True}) is True
+
+        # Now barrage with 500 routine snapshots while queue is saturated
+        for i in range(500):
+            q.enqueue({"event": f"snap_flood_{i}", "critical": False})
+
+        # The critical alarm MUST still be present in the queue
+        all_events = [item["event"] for item in list(q._q)]
+        assert "GAS_ALARM" in all_events, "CRITICAL ALARM WAS SILENTLY DROPPED BY ROUTINE SNAPS!"
+
+    def test_multiple_critical_alarms_preserved_under_continuous_saturation(self):
+        """When 10 critical alarms are recorded amidst heavy traffic, all 10 are retained."""
+        q = LogQueue(capacity=40)
+        # Fill queue halfway with routine
+        for i in range(20):
+            q.enqueue({"event": f"snap_{i}", "critical": False})
+
+        # Inject 10 distinct critical alarms
+        alarm_names = [f"ALARM_{i}" for i in range(10)]
+        for name in alarm_names:
+            accepted = q.enqueue({"event": name, "critical": True})
+            assert accepted is True
+
+        # Flood with 200 more non-critical snaps
+        for i in range(200):
+            q.enqueue({"event": f"snap_flood_{i}", "critical": False})
+
+        # All 10 alarms must still reside in the queue
+        present_events = {item["event"] for item in q._q}
+        for name in alarm_names:
+            assert name in present_events, f"Alarm {name} was unexpectedly evicted!"
+
+    def test_100_percent_critical_queue_drops_oldest_critical_for_newest(self):
+        """If emergency conditions produce 41 critical alarms, oldest is dropped for newest."""
+        q = LogQueue(capacity=40)
+        for i in range(40):
+            q.enqueue({"event": f"CRIT_{i}", "critical": True})
+
+        # Enqueue the 41st critical alarm
+        accepted = q.enqueue({"event": "CRIT_41", "critical": True})
+        assert accepted is True
+        assert len(q) == 40
+        # CRIT_0 should have been displaced by CRIT_41
+        events = [item["event"] for item in q._q]
+        assert "CRIT_0" not in events
+        assert events[-1] == "CRIT_41"
+
+
+# =============================================================================
+# Targeted Buffer Overrun & Sampling Continuity Tests
+# =============================================================================
+
+class TestBufferOverrunRecovery:
+    """Verifies circular ring buffer invariants under consumer stalls (overruns)."""
+
+    def test_consumer_lag_simulated_overrun_detection(self):
+        """If consumer is blocked for 3 seconds while timer ISR produces 12,000 samples,
+        the buffer safely wraps without memory fault and yields the latest contiguous 1-sec window."""
+        rb = RingBuffer(capacity_pow2=8192)
+        # 4 kHz sampling for 3 seconds = 12,000 samples pushed by ISR
+        for sample_idx in range(12000):
+            rb.push(sample_idx)
+
+        # Overrun occurred: head (12000) > capacity (8192)
+        assert rb.head == 12000
+
+        # Consumer wakes up: reads 1000 ms window (4000 samples)
+        window = rb.read_window(4000)
+        assert len(window) == 4000
+
+        # Invariant: latest sample must be exactly sample 11999
+        assert window[-1] == 11999
+        # Invariant: first sample of 4000-sample window must be exactly sample 8000
+        assert window[0] == 8000
+        # Invariant: samples inside the window are strictly monotonic without distortion
+        diffs = [window[i + 1] - window[i] for i in range(len(window) - 1)]
+        assert all(d == 1 for d in diffs), "Contiguous window order corrupted during circular wrap!"
+
+
+# =============================================================================
+# Targeted Wi-Fi Reconnection Backoff Tests
+# =============================================================================
+
+class WiFiBackoffSimulator:
+    """Exact logic mirror of leak_detector.ino lines 748-770."""
+
+    def __init__(self, initial_ms: int = 5000, max_ms: int = 60000):
+        self.initial_ms = initial_ms
+        self.max_ms = max_ms
+        self.current_backoff_ms = initial_ms
+        self.connected = True
+
+    def on_disconnect(self):
+        self.connected = False
+
+    def on_retry_failure(self):
+        """Doubles backoff up to max_ms (60000)."""
+        self.current_backoff_ms = (
+            self.current_backoff_ms * 2 if self.current_backoff_ms <= 30000 else self.max_ms
+        )
+
+    def on_connect(self):
+        self.connected = True
+        self.current_backoff_ms = self.initial_ms
+
+
+class TestWiFiReconnectionBackoffLogic:
+
+    def test_initial_backoff_is_5_seconds(self):
+        wifi = WiFiBackoffSimulator()
+        assert wifi.current_backoff_ms == 5000
+
+    def test_progressive_exponential_growth_on_repeated_failures(self):
+        wifi = WiFiBackoffSimulator()
+        wifi.on_disconnect()
+
+        expected_sequence = [10000, 20000, 40000, 60000, 60000, 60000]
+        actual_sequence = []
+        for _ in expected_sequence:
+            wifi.on_retry_failure()
+            actual_sequence.append(wifi.current_backoff_ms)
+
+        assert actual_sequence == expected_sequence
+
+    def test_reconnection_immediately_resets_backoff_to_5_seconds(self):
+        wifi = WiFiBackoffSimulator()
+        wifi.on_disconnect()
+        # Fail 5 times to reach 60s
+        for _ in range(5):
+            wifi.on_retry_failure()
+        assert wifi.current_backoff_ms == 60000
+
+        # Now reconnect
+        wifi.on_connect()
+        assert wifi.current_backoff_ms == 5000
