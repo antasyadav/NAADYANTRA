@@ -46,13 +46,17 @@ Inspection of [leak_detector.ino](file:///d:/NAADYANTRA/leak_detector.ino) verif
 
 ## 3. Strict Compatibility & Non-Breaking Verification
 
-- **GPIO Pin Allocations:** Confirmed 100% unchanged:
-  - `PIN_PIEZO = 34` (ADC1_CH6)
-  - `PIN_GAS = 35` (ADC1_CH7)
-  - `PIN_UV = 32` (ADC1_CH4)
-  - `PIN_MOISTURE = 33` (ADC1_CH5)
-  - `PIN_SDA = 21`, `PIN_SCL = 22` (I2C)
-  - `PIN_BUZZER = 25`, `PIN_VIBRATOR = 26` (PWM / outputs)
+- **GPIO Pin Allocations:** Confirmed 100% unchanged from firmware source (`leak_detector.ino` lines 88–102):
+  - `PIN_PIEZO = 34` (ADC1_CH6) — Piezo acoustic contact sensor
+  - `PIN_REFERENCE = 33` (ADC1_CH5) — Optional ambient reference sensor
+  - `PIN_GAS = 35` (ADC1_CH7) — MQ-2 gas sensor
+  - `PIN_MOISTURE = 32` (ADC1_CH4) — Moisture / condensation probe
+  - `PIN_UV = 36` (ADC1_CH0, VP) — GUVA-S12SD analog UV sensor
+  - `PIN_MOIST_PWR = 23` — Moisture excitation power gate pin
+  - `PIN_SDA = 21`, `PIN_SCL = 22` — Hardware I2C bus (OLED @ 0x3C, MLX90614 @ 0x5A)
+  - `PIN_BUZZER = 25`, `PIN_VIBRATION = 26` — Actuators (audible/haptic)
+  - `PIN_LED_GREEN = 27`, `PIN_LED_YELLOW = 14`, `PIN_LED_RED = 13` — Diagnostic LEDs
+  - `PIN_BUTTON = 0` — BOOT button (tactile session / calibration control)
 - **Acoustic Sampling Pipeline:** Confirmed 100% unchanged:
   - `SAMPLE_RATE_HZ = 4000` (250 µs timer period)
   - `WINDOW_MS = 1000` (4000 samples)
